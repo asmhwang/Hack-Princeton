@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import Select
+from sqlalchemy.orm import InstrumentedAttribute
 
 _MAX_LIMIT = 200
 
@@ -10,7 +11,7 @@ _MAX_LIMIT = 200
 def apply_cursor(
     stmt: Select,  # type: ignore[type-arg]
     *,
-    before_col: object,
+    before_col: InstrumentedAttribute[datetime],
     before: datetime | None,
     limit: int,
 ) -> Select:  # type: ignore[type-arg]

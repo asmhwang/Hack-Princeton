@@ -163,3 +163,67 @@ async def test_tool_invocation_model_shape() -> None:
     assert inv.tool == "t"
     assert inv.args == {"x": 1}
     assert inv.result == {"ok": True}
+
+
+@pytest.mark.asyncio
+async def test_api_key_rotates_on_quota_exhausted(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """On 429 RESOURCE_EXHAUSTED, LLMClient cycles to the next key and retries."""
+    monkeypatch.setenv("GEMINI_API_KEYS", "key-A,key-B,key-C")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+    client = LLMClient(cache_path=tmp_path / "c.sqlite", model="flash")
+    assert client._api_keys == ["key-A", "key-B", "key-C"]
+    assert client._key_idx == 0
+
+    calls: list[str | None] = []
+
+    async def fake_once() -> str:
+        calls.append(client._api_key)
+        # First two keys report quota exhausted; third succeeds.
+        if len(calls) < 3:  # noqa: PLR2004
+            raise RuntimeError(
+                "429 RESOURCE_EXHAUSTED. Quota exceeded for generate_content_free_tier_requests"
+            )
+        return "ok"
+
+    out = await client._with_key_rotation(fake_once)
+    assert out == "ok"
+    assert calls == ["key-A", "key-B", "key-C"]
+    assert client._key_idx == 2  # noqa: PLR2004
+
+
+@pytest.mark.asyncio
+async def test_api_key_rotation_reraises_non_quota_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Non-quota errors propagate immediately without rotating."""
+    monkeypatch.setenv("GEMINI_API_KEYS", "key-A,key-B")
+
+    client = LLMClient(cache_path=tmp_path / "c.sqlite", model="flash")
+
+    async def always_fails() -> str:
+        raise RuntimeError("400 INVALID_ARGUMENT something else entirely")
+
+    with pytest.raises(RuntimeError, match="INVALID_ARGUMENT"):
+        await client._with_key_rotation(always_fails)
+    assert client._key_idx == 0  # no rotation
+
+
+@pytest.mark.asyncio
+async def test_api_key_rotation_exhausts_all_keys(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """When every configured key is quota-exhausted, last error propagates."""
+    monkeypatch.setenv("GEMINI_API_KEYS", "key-A,key-B")
+
+    client = LLMClient(cache_path=tmp_path / "c.sqlite", model="flash")
+
+    async def always_quota() -> str:
+        raise RuntimeError("429 RESOURCE_EXHAUSTED")
+
+    with pytest.raises(RuntimeError, match="429"):
+        await client._with_key_rotation(always_quota)
+    # Should have attempted both keys before giving up.
+    assert client._key_idx == 1

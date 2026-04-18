@@ -14,6 +14,7 @@ dependencies = [
   "tenacity>=9.0",
   "google-genai>=0.3",
   "httpx>=0.28",
+  "sqlparse>=0.5",
   # openclaw  # TODO: set after Eragon provides install path
 ]
 
@@ -44,6 +45,10 @@ quote-style = "double"
 python_version = "3.12"
 strict = true
 warn_unused_ignores = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["sqlparse.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

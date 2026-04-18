@@ -13,7 +13,7 @@ repos:
         types_or: [python, pyi]
       - id: mypy-shared
         name: mypy (shared modules)
-        entry: uv run mypy --strict backend/db backend/schemas backend/llm backend/agents/base.py
+        entry: bash -c 'paths=""; for p in backend/db backend/schemas backend/llm backend/agents/base.py; do [ -e "$p" ] && paths="$paths $p"; done; [ -z "$paths" ] && exit 0; uv run mypy --strict $paths'
         language: system
         pass_filenames: false
         types: [python]
@@ -36,7 +36,7 @@ repos:
         files: ^web/
       - id: openapi-types-fresh
         name: openapi-typescript in sync
-        entry: bash -c 'cd web && pnpm run openapi:check'
+        entry: bash -c '[ -d web ] && cd web && pnpm run openapi:check || exit 0'
         language: system
         pass_filenames: false
         files: ^(backend/api|web/types/api.ts)

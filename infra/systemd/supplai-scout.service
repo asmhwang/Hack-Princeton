@@ -1,0 +1,20 @@
+[Unit]
+Description=suppl.ai Scout agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=supplai
+WorkingDirectory=/opt/supplai
+Environment="PYTHONPATH=/opt/supplai"
+EnvironmentFile=/etc/supplai/env
+ExecStart=/usr/local/bin/uv run python -m backend.agents.scout.main
+StateDirectory=supplai
+Restart=on-failure
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

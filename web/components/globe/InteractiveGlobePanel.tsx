@@ -3,9 +3,97 @@
 import { useRef, useEffect, useState, useMemo } from "react";
 import dynamic from "next/dynamic";
 import type { ComponentType } from "react";
-import type { GlobeRoute, RouteMode } from "@/components/globe/routes";
+import * as THREE from "three";
+import { AnimatePresence, motion } from "motion/react";
+import type { AlternativeRoute, GlobeRoute, RouteMode } from "@/components/globe/routes";
 import { arcColorForRoute } from "@/components/globe/routes";
 import { formatCurrency } from "@/lib/format";
+
+// Per-mode arc altitude. Rail/truck hug the surface; ocean rides low; air arches high.
+const MODE_ALTITUDE: Record<RouteMode, number> = {
+  rail:  0.005,
+  truck: 0.005,
+  ocean: 0.05,
+  air:   0.22,
+};
+
+// Path accessors — hoisted so their identities are stable across re-renders
+// (mousemove causes frequent re-renders; inline fns would trip react-globe.gl
+// into redrawing the paths and resetting the dash animation).
+const pathPoints = (d: AlternativeRoute) => d.waypoints;
+const pathPointLat = (p: [number, number]) => p[0];
+const pathPointLng = (p: [number, number]) => p[1];
+const pathPointAlt = () => 0.005;
+const PATH_MODE_COLOR: Record<RouteMode, string> = {
+  ocean: "rgba(99,179,237,0.85)",
+  air:   "rgba(167,139,250,0.85)",
+  rail:  "rgba(251,191,36,0.85)",
+  truck: "rgba(110,231,183,0.85)",
+};
+const pathColor = (d: AlternativeRoute) => PATH_MODE_COLOR[d.mode];
+
+// ─── Arc hit layer (invisible thick tubes for easier click/hover) ──
+// Decouples hit-area from visible stroke: we keep `arcStroke` thin for looks
+// and raycast against fat transparent tubes rendered here via customLayerData.
+const GLOBE_RADIUS = 100; // three-globe default
+const HIT_TUBE_RADIUS = 1.6; // ~1.6% of globe radius — generous click target
+const HIT_TUBE_SEGMENTS = 48;
+
+// Material is transparent-ish but still hit-testable. opacity: 0 can cause some
+// three.js pipelines to skip raycasting, so we use a vanishingly small value.
+const HIT_TUBE_MATERIAL = new THREE.MeshBasicMaterial({
+  transparent: true,
+  opacity: 0.001,
+  depthWrite: false,
+});
+
+function latLngToUnitVec3(lat: number, lng: number): THREE.Vector3 {
+  const phi = ((90 - lat) * Math.PI) / 180;
+  const theta = ((lng + 180) * Math.PI) / 180;
+  return new THREE.Vector3(
+    -Math.sin(phi) * Math.cos(theta),
+     Math.cos(phi),
+     Math.sin(phi) * Math.sin(theta),
+  );
+}
+
+function greatCircleArcPoints(
+  from: [number, number],
+  to: [number, number],
+  peakAltitude: number,
+  segments: number = HIT_TUBE_SEGMENTS,
+): THREE.Vector3[] {
+  const a = latLngToUnitVec3(from[0], from[1]);
+  const b = latLngToUnitVec3(to[0], to[1]);
+  const omega = a.angleTo(b);
+  const sinOmega = Math.sin(omega);
+  const out: THREE.Vector3[] = [];
+  for (let i = 0; i <= segments; i++) {
+    const t = i / segments;
+    let p: THREE.Vector3;
+    if (sinOmega < 1e-6) {
+      p = a.clone().lerp(b, t).normalize();
+    } else {
+      const wa = Math.sin((1 - t) * omega) / sinOmega;
+      const wb = Math.sin(t * omega) / sinOmega;
+      p = a.clone().multiplyScalar(wa).add(b.clone().multiplyScalar(wb)).normalize();
+    }
+    // Parabolic altitude envelope peaking at t=0.5, matching three-globe's arc shape.
+    // +0.006 baseline so ground-hugging tubes sit slightly above the globe mesh
+    // and rays from the camera don't get eaten by the sphere surface first.
+    const altFactor = 1 + peakAltitude * 4 * t * (1 - t) + 0.006;
+    p.multiplyScalar(GLOBE_RADIUS * altFactor);
+    out.push(p);
+  }
+  return out;
+}
+
+function makeArcHitMesh(route: GlobeRoute): THREE.Mesh {
+  const points = greatCircleArcPoints(route.from, route.to, MODE_ALTITUDE[route.mode]);
+  const curve = new THREE.CatmullRomCurve3(points);
+  const geo = new THREE.TubeGeometry(curve, HIT_TUBE_SEGMENTS, HIT_TUBE_RADIUS, 8, false);
+  return new THREE.Mesh(geo, HIT_TUBE_MATERIAL);
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type GlobeComponent = ComponentType<Record<string, any>>;
@@ -164,7 +252,9 @@ function CityTooltip({
 function ArcTooltip({
   route, pos,
 }: Readonly<{ route: GlobeRoute; pos: { x: number; y: number } }>) {
-  const left = Math.min(pos.x + 16, window.innerWidth - 220);
+  const hasAlts = route.status === "blocked" && (route.alternatives?.length ?? 0) > 0;
+  const width = hasAlts ? 320 : 210;
+  const left = Math.min(pos.x + 16, window.innerWidth - width - 8);
   return (
     <div style={{
       position: "fixed", left, top: pos.y - 14,
@@ -174,7 +264,7 @@ function ArcTooltip({
       borderRadius: 5,
       padding: "8px 12px",
       pointerEvents: "none",
-      width: 210,
+      width,
       boxShadow: "0 8px 24px rgba(0,0,0,0.6)",
     }}>
       <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
@@ -193,31 +283,79 @@ function ArcTooltip({
         </span>
         <span className="tnum" style={{ fontSize: 12, fontWeight: 600 }}>{formatCurrency(route.exposure)}</span>
       </div>
+
+      {hasAlts && (
+        <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--color-border)" }}>
+          <div style={{
+            fontSize: 9, color: "var(--color-text-subtle)",
+            textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6,
+          }}>
+            {route.alternatives!.length} alternative{route.alternatives!.length === 1 ? "" : "s"}
+          </div>
+          {route.alternatives!.map((alt) => (
+            <AltRow key={alt.id} alt={alt} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AltRow({ alt }: Readonly<{ alt: AlternativeRoute }>) {
+  const costSign = alt.extra_cost_usd >= 0 ? "+" : "−";
+  const timeSign = alt.time_delta_days >= 0 ? "+" : "−";
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+        <span style={{ width: 5, height: 5, borderRadius: 5, background: MODE_COLOR[alt.mode], flexShrink: 0 }} />
+        <span style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text)" }}>{alt.label}</span>
+      </div>
+      <div style={{ display: "flex", gap: 10, paddingLeft: 11, marginBottom: 2, fontFamily: "var(--font-mono)" }}>
+        <span style={{ fontSize: 10, color: "var(--color-text-muted)" }} className="tnum">
+          {costSign}{formatCurrency(Math.abs(alt.extra_cost_usd))}
+        </span>
+        <span style={{ fontSize: 10, color: "var(--color-text-muted)" }} className="tnum">
+          {timeSign}{Math.abs(alt.time_delta_days)}d
+        </span>
+        <span style={{ fontSize: 10, color: "var(--color-ok)" }} className="tnum">
+          {alt.confidence_pct}% conf
+        </span>
+      </div>
+      <div style={{ paddingLeft: 11, fontSize: 10, color: "var(--color-text-subtle)", lineHeight: "14px" }}>
+        {alt.reason}
+      </div>
     </div>
   );
 }
 
 // ─── Selected arc panel ───────────────────────────────────────────
 function RouteDetailPanel({ route, onClose }: Readonly<{ route: GlobeRoute; onClose: () => void }>) {
+  const hasAlts = route.status === "blocked" && (route.alternatives?.length ?? 0) > 0;
   return (
-    <div style={{
-      position: "absolute", bottom: 0, left: 0, right: 0,
-      background: "linear-gradient(0deg, rgba(10,10,10,0.98) 0%, rgba(10,10,10,0.9) 100%)",
-      borderTop: "1px solid var(--color-border)",
-      padding: "14px 20px",
-      display: "grid",
-      gridTemplateColumns: "200px 100px 130px 1fr auto",
-      gap: 24,
-      alignItems: "center",
-      backdropFilter: "blur(12px)",
-    }}>
+    <motion.div
+      initial={{ y: 60, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      exit={{ y: 60, opacity: 0 }}
+      transition={{ type: "spring", stiffness: 260, damping: 26, mass: 0.9 }}
+      style={{
+        position: "absolute", bottom: 0, left: 0, right: 0,
+        background: "linear-gradient(0deg, rgba(10,10,10,0.98) 0%, rgba(10,10,10,0.9) 100%)",
+        borderTop: "1px solid var(--color-border)",
+        padding: "14px 20px",
+        display: "grid",
+        gridTemplateColumns: "200px 100px 130px 1fr auto",
+        gap: 24,
+        alignItems: "center",
+        backdropFilter: "blur(12px)",
+      }}
+    >
       <div>
         <div style={{ fontSize: 10, color: "var(--color-text-subtle)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Route</div>
         <div style={{ fontSize: 13, fontWeight: 600 }}>{route.origin} → {route.destination}</div>
         <div style={{ marginTop: 3, display: "flex", alignItems: "center", gap: 5 }}>
           <span style={{ width: 5, height: 5, borderRadius: 5, background: MODE_COLOR[route.mode] }} />
           <span style={{ fontSize: 11, color: "var(--color-text-subtle)" }}>{MODE_LABEL[route.mode]}</span>
-          <span style={{ fontSize: 11, color: "var(--color-text-subtle)", fontFamily: "var(--font-mono)" }}>· {route.id}</span>
+          <span style={{ fontSize: 11, color: "var(--color-text-subtle)", fontFamily: "var(--font-mono)" }}>· {route.carrier} · {route.transit_days}d</span>
         </div>
       </div>
       <div>
@@ -226,7 +364,7 @@ function RouteDetailPanel({ route, onClose }: Readonly<{ route: GlobeRoute; onCl
           <span style={{ width: 6, height: 6, borderRadius: 6, background: STATUS_COLOR[route.status] }} />
           <span style={{ fontSize: 13, fontWeight: 600, color: STATUS_COLOR[route.status], textTransform: "capitalize" }}>{route.status}</span>
         </div>
-        <div style={{ fontSize: 11, color: "var(--color-text-subtle)", marginTop: 3 }}>{route.carrier}</div>
+        <div style={{ fontSize: 11, color: "var(--color-text-subtle)", marginTop: 3, fontFamily: "var(--font-mono)" }}>{route.id}</div>
       </div>
       <div>
         <div style={{ fontSize: 10, color: "var(--color-text-subtle)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Exposure</div>
@@ -234,8 +372,18 @@ function RouteDetailPanel({ route, onClose }: Readonly<{ route: GlobeRoute; onCl
         <div style={{ fontSize: 11, color: "var(--color-text-subtle)", marginTop: 3 }}>{route.transit_days}d transit</div>
       </div>
       <div>
-        <div style={{ fontSize: 10, color: "var(--color-text-subtle)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Recommendation</div>
-        <div style={{ fontSize: 12, lineHeight: "17px", color: "var(--color-text-muted)" }}>{route.recommendation}</div>
+        <div style={{ fontSize: 10, color: "var(--color-text-subtle)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+          {hasAlts ? `${route.alternatives!.length} alternatives` : "Recommendation"}
+        </div>
+        {hasAlts ? (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            {route.alternatives!.map((alt) => (
+              <PanelAltCard key={alt.id} alt={alt} />
+            ))}
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, lineHeight: "17px", color: "var(--color-text-muted)" }}>{route.recommendation}</div>
+        )}
       </div>
       <button type="button" onClick={onClose} style={{
         width: 26, height: 26, borderRadius: 4,
@@ -244,6 +392,38 @@ function RouteDetailPanel({ route, onClose }: Readonly<{ route: GlobeRoute; onCl
         display: "flex", alignItems: "center", justifyContent: "center",
         cursor: "pointer", fontSize: 12, flexShrink: 0,
       }}>✕</button>
+    </motion.div>
+  );
+}
+
+function PanelAltCard({ alt }: Readonly<{ alt: AlternativeRoute }>) {
+  const costSign = alt.extra_cost_usd >= 0 ? "+" : "−";
+  const timeSign = alt.time_delta_days >= 0 ? "+" : "−";
+  return (
+    <div style={{
+      border: "1px solid var(--color-border)",
+      borderRadius: 4,
+      padding: "8px 10px",
+      background: "rgba(255,255,255,0.02)",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+        <span style={{ width: 5, height: 5, borderRadius: 5, background: MODE_COLOR[alt.mode], flexShrink: 0 }} />
+        <span style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text)" }}>{alt.label}</span>
+      </div>
+      <div style={{ display: "flex", gap: 10, marginBottom: 4, fontFamily: "var(--font-mono)" }}>
+        <span className="tnum" style={{ fontSize: 10, color: "var(--color-text-muted)" }}>
+          {costSign}{formatCurrency(Math.abs(alt.extra_cost_usd))}
+        </span>
+        <span className="tnum" style={{ fontSize: 10, color: "var(--color-text-muted)" }}>
+          {timeSign}{Math.abs(alt.time_delta_days)}d
+        </span>
+        <span className="tnum" style={{ fontSize: 10, color: "var(--color-ok)" }}>
+          {alt.confidence_pct}% conf
+        </span>
+      </div>
+      <div style={{ fontSize: 10, color: "var(--color-text-subtle)", lineHeight: "14px" }}>
+        {alt.reason}
+      </div>
     </div>
   );
 }
@@ -254,14 +434,63 @@ function pointColor(d: CityPoint, hovered: CityPoint | null): string {
   return MODE_COLOR[d.mode];
 }
 
+// ─── Tooltip overlay (owns mousePos) ──────────────────────────────
+// Kept separate so mouse-tracking doesn't re-render the GlobeGL-hosting parent.
+function TooltipOverlay({
+  hoveredArc, hoveredPoint, hasSelectedRoute, routes,
+}: Readonly<{
+  hoveredArc: GlobeRoute | null;
+  hoveredPoint: CityPoint | null;
+  hasSelectedRoute: boolean;
+  routes: GlobeRoute[];
+}>) {
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const active = !!(hoveredArc || hoveredPoint);
+
+  useEffect(() => {
+    if (!active) return;
+    const handler = (e: MouseEvent) => setPos({ x: e.clientX, y: e.clientY });
+    window.addEventListener("mousemove", handler);
+    return () => window.removeEventListener("mousemove", handler);
+  }, [active]);
+
+  const showCityTooltip = hoveredPoint && !hoveredArc;
+  const showArcTooltip = hoveredArc && !hasSelectedRoute && !hoveredPoint;
+
+  return (
+    <>
+      {showCityTooltip && (
+        <CityTooltip point={hoveredPoint} routes={routes} pos={pos} />
+      )}
+      {showArcTooltip && (
+        <ArcTooltip route={hoveredArc} pos={pos} />
+      )}
+    </>
+  );
+}
+
 // ─── Main panel ───────────────────────────────────────────────────
 export function InteractiveGlobePanel({ routes, stormCenter, disruptionTitle }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const globeRef = useRef<any>(null);
   const [width, setWidth] = useState(800);
   const [selectedRoute, setSelectedRoute] = useState<GlobeRoute | null>(null);
   const [hoveredArc, setHoveredArc] = useState<GlobeRoute | null>(null);
   const [hoveredPoint, setHoveredPoint] = useState<CityPoint | null>(null);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+
+  // Alternatives to show: hovered blocked route wins, else selected blocked route.
+  // Memoized against mousemove-driven re-renders — a new array reference makes
+  // react-globe.gl think the path data changed and retriggers its transition.
+  const alternativePaths = useMemo<AlternativeRoute[]>(() => {
+    const blocked = (r: GlobeRoute | null) =>
+      r?.status === "blocked" && (r.alternatives?.length ?? 0) > 0 ? r : null;
+    const source = blocked(hoveredArc) ?? blocked(selectedRoute);
+    return source?.alternatives ?? [];
+    // Deps are the IDs, not the objects — referential stability is the whole
+    // point here. The alternatives array per route is immutable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hoveredArc?.id, selectedRoute?.id]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -307,7 +536,6 @@ export function InteractiveGlobePanel({ routes, stormCenter, disruptionTitle }: 
 
   const stormRings = stormCenter ? [{ lat: stormCenter.lat, lng: stormCenter.lng }] : [];
   const globeHeight = selectedRoute ? 520 : 460;
-  const showCityTooltip = hoveredPoint && !hoveredArc;
 
   return (
     <div
@@ -315,9 +543,9 @@ export function InteractiveGlobePanel({ routes, stormCenter, disruptionTitle }: 
       aria-label="Interactive supply chain globe"
       data-testid="supply-globe-panel"
       style={{ position: "relative", borderBottom: "1px solid var(--color-border)", background: "#0c0c0c", overflow: "hidden" }}
-      onMouseMove={(e) => setMousePos({ x: e.clientX, y: e.clientY })}
     >
       <GlobeGL
+        ref={globeRef}
         width={width}
         height={globeHeight}
         backgroundColor="#0c0c0c00"
@@ -325,6 +553,11 @@ export function InteractiveGlobePanel({ routes, stormCenter, disruptionTitle }: 
         bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
         atmosphereColor="rgba(130,110,80,0.25)"
         atmosphereAltitude={0.14}
+        onGlobeReady={() => {
+          if (globeRef.current?.pointOfView) {
+            globeRef.current.pointOfView({ lat: 20, lng: 110, altitude: 1.8 }, 0);
+          }
+        }}
 
         // ── Arcs ──────────────────────────────────────────────────
         arcsData={routes}
@@ -334,6 +567,8 @@ export function InteractiveGlobePanel({ routes, stormCenter, disruptionTitle }: 
         arcEndLng={(d: GlobeRoute) => d.to[1]}
         arcColor={(d: GlobeRoute) => arcColorForRoute(d)}
         arcStroke={(d: GlobeRoute) => {
+          // Visual width only — the hit-area lives on a separate invisible
+          // customLayerData tube (see makeArcHitMesh).
           if (d.id === selectedRoute?.id) return 1.4;
           if (d.id === hoveredArc?.id) return 1.0;
           if (d.status === "blocked") return 0.6;
@@ -343,9 +578,32 @@ export function InteractiveGlobePanel({ routes, stormCenter, disruptionTitle }: 
         arcDashLength={(d: GlobeRoute) => d.status === "blocked" ? 0.25 : 0.7}
         arcDashGap={(d: GlobeRoute) => d.status === "blocked" ? 0.08 : 0.4}
         arcDashAnimateTime={(d: GlobeRoute) => d.status === "blocked" ? 1400 : 2800}
-        arcAltitudeAutoScale={0.3}
+        arcAltitude={(d: GlobeRoute) => MODE_ALTITUDE[d.mode]}
+        // Keep arc hover/click handlers as a fallback — they still fire on
+        // direct hits against the thin visible mesh, while the custom hit-
+        // layer below widens the hit area everywhere else.
         onArcClick={(d: GlobeRoute) => setSelectedRoute((prev) => (prev?.id === d.id ? null : d))}
         onArcHover={(d: GlobeRoute | null) => setHoveredArc(d ?? null)}
+
+        // ── Invisible hit layer (fat transparent tubes along each arc's great circle) ─
+        customLayerData={routes}
+        customThreeObject={(d: GlobeRoute) => makeArcHitMesh(d)}
+        customThreeObjectUpdate={() => { /* static geometry */ }}
+        onCustomLayerClick={(d: GlobeRoute) => setSelectedRoute((prev) => (prev?.id === d.id ? null : d))}
+        onCustomLayerHover={(d: GlobeRoute | null) => setHoveredArc(d ?? null)}
+
+        // ── Alternative paths (appear on hover/select of blocked routes) ─
+        pathsData={alternativePaths}
+        pathPoints={pathPoints}
+        pathPointLat={pathPointLat}
+        pathPointLng={pathPointLng}
+        pathPointAlt={pathPointAlt}
+        pathColor={pathColor}
+        pathStroke={0.6}
+        pathDashLength={0.35}
+        pathDashGap={0.18}
+        pathDashAnimateTime={2200}
+        pathTransitionDuration={0}
 
         // ── City dots ─────────────────────────────────────────────
         pointsData={allPoints}
@@ -419,20 +677,25 @@ export function InteractiveGlobePanel({ routes, stormCenter, disruptionTitle }: 
         </div>
       )}
 
-      {/* City node tooltip */}
-      {showCityTooltip && (
-        <CityTooltip point={hoveredPoint} routes={routes} pos={mousePos} />
-      )}
-
-      {/* Arc hover tooltip */}
-      {hoveredArc && !selectedRoute && !hoveredPoint && (
-        <ArcTooltip route={hoveredArc} pos={mousePos} />
-      )}
+      {/* Tooltip overlay — owns its own mousePos state so tracking the cursor
+          doesn't re-render the parent (and thus doesn't thrash GlobeGL). */}
+      <TooltipOverlay
+        hoveredArc={hoveredArc}
+        hoveredPoint={hoveredPoint}
+        hasSelectedRoute={!!selectedRoute}
+        routes={routes}
+      />
 
       {/* Selected route panel */}
-      {selectedRoute && (
-        <RouteDetailPanel route={selectedRoute} onClose={() => setSelectedRoute(null)} />
-      )}
+      <AnimatePresence>
+        {selectedRoute && (
+          <RouteDetailPanel
+            key={selectedRoute.id}
+            route={selectedRoute}
+            onClose={() => setSelectedRoute(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

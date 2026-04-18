@@ -3,6 +3,17 @@ import type { AffectedShipment } from "@/types/schemas";
 export type RouteStatus = "good" | "watch" | "blocked";
 export type RouteMode = "ocean" | "air" | "rail" | "truck";
 
+export type AlternativeRoute = {
+  id: string;
+  label: string;                    // short human name, e.g. "Cape of Good Hope bypass"
+  mode: RouteMode;
+  waypoints: [number, number][];    // [lat, lng] polyline, origin → ... → destination
+  extra_cost_usd: number;           // signed delta vs blocked primary
+  time_delta_days: number;          // signed delta vs blocked primary
+  confidence_pct: number;           // 0–100
+  reason: string;                   // one-liner tradeoff
+};
+
 export type GlobeRoute = {
   id: string;
   origin: string;
@@ -16,6 +27,7 @@ export type GlobeRoute = {
   carrier: string;
   recommendation: string;
   reason: string;
+  alternatives?: AlternativeRoute[];
 };
 
 export const demoRoutes: GlobeRoute[] = [
@@ -60,6 +72,39 @@ export const demoRoutes: GlobeRoute[] = [
     carrier: "Maersk",
     recommendation: "Reroute via Singapore and rail from Hamburg for priority SKUs.",
     reason: "Route crosses Red Sea advisory region — SLA breach risk is high.",
+    alternatives: [
+      {
+        id: "ALT-SHA-RTM-COGH",
+        label: "Cape of Good Hope bypass",
+        mode: "ocean",
+        waypoints: [
+          [31.2304, 121.4737],  // Shanghai
+          [1.3521, 103.8198],   // Singapore
+          [-33.9249, 18.4241],  // Cape Town
+          [51.9244, 4.4777],    // Rotterdam
+        ],
+        extra_cost_usd: 420_000,
+        time_delta_days: 12,
+        confidence_pct: 92,
+        reason: "Bypasses Red Sea advisory; carriers already shifted.",
+      },
+      {
+        id: "ALT-SHA-RTM-TSR",
+        label: "Trans-Siberian rail via Hamburg",
+        mode: "rail",
+        waypoints: [
+          [31.2304, 121.4737],  // Shanghai
+          [43.1332, 131.9113],  // Vladivostok
+          [55.7558, 37.6173],   // Moscow
+          [53.5753, 10.0153],   // Hamburg
+          [51.9244, 4.4777],    // Rotterdam
+        ],
+        extra_cost_usd: 180_000,
+        time_delta_days: 7,
+        confidence_pct: 74,
+        reason: "Avoids maritime chokepoints; Kazakh permit backlog ±3d.",
+      },
+    ],
   },
   {
     id: "RTE-MAA-FRA",
@@ -102,6 +147,36 @@ export const demoRoutes: GlobeRoute[] = [
     carrier: "EVA Air Cargo",
     recommendation: "Activate backup ocean routing via Vancouver and rail.",
     reason: "Airspace congestion + customs hold on semiconductor components.",
+    alternatives: [
+      {
+        id: "ALT-TPE-ORD-VANRAIL",
+        label: "Ocean to Vancouver + rail",
+        mode: "ocean",
+        waypoints: [
+          [25.033, 121.5654],   // Taipei
+          [49.2827, -123.1207], // Vancouver
+          [41.8781, -87.6298],  // Chicago
+        ],
+        extra_cost_usd: 120_000,
+        time_delta_days: 18,
+        confidence_pct: 88,
+        reason: "Clears airspace + customs bottleneck; doubles transit.",
+      },
+      {
+        id: "ALT-TPE-ORD-ANC",
+        label: "Air via Anchorage",
+        mode: "air",
+        waypoints: [
+          [25.033, 121.5654],   // Taipei
+          [61.2181, -149.9003], // Anchorage
+          [41.8781, -87.6298],  // Chicago
+        ],
+        extra_cost_usd: 320_000,
+        time_delta_days: 0.5,
+        confidence_pct: 71,
+        reason: "Skirts congested Pacific corridors; keeps SLA window.",
+      },
+    ],
   },
   {
     id: "RTE-PVG-HBG",

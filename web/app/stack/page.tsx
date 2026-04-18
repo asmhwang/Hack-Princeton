@@ -3,103 +3,109 @@
 import { motion } from "motion/react";
 import type { ReactNode } from "react";
 
+/* Emil's strong ease-out — snappier than the browser default. Used for all
+ * entry animations (layers, chips, source cards). */
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
-const ARROW = "#A78BFA";
-const ARROW_DIM = "#A78BFA40";
+/* Arrow tint — muted-violet that reads clearly on the dark bg and doesn't
+ * fight the category accent colors used inside each layer. */
+const ARROW_DIM = "#A78BFA2C";
 
-/* ── Pulse between layers ────────────────────────────────────────────────── */
+/* ── PulseLine ──────────────────────────────────────────────────────────
+ * A top-to-bottom connector. Three stacked SVG strokes:
+ *   1. Dim static dashed base — makes the connection always legible
+ *   2. Halo (wide, blurred, 45% opacity)  ──╮ identical animation so the
+ *   3. Main sharp pulse (narrow, drop-shadow)  ╯  halo reads as the dash's tail
+ * Arrowhead sits at the bottom pointing down in the flow direction.
+ * pathLength=100 normalizes the dash math, so one keyframe serves every
+ * connector regardless of its actual pixel length. */
 
-function VerticalPulse({
-  accent = ARROW,
-  delay = 0,
-  count = 1,
-}: {
-  accent?: string;
-  delay?: number;
-  count?: number;
-}) {
-  const lines = Array.from({ length: count }, (_, i) => i);
+function PulseLine({ delay = 0, color }: { delay?: number; color: string }) {
   return (
-    <div className="relative flex h-6 w-full items-stretch justify-center gap-8">
-      {lines.map((i) => (
-        <div key={i} className="relative h-full w-px">
-          <svg
-            viewBox="0 0 2 24"
-            preserveAspectRatio="none"
-            className="absolute inset-0 h-full w-[14px] -translate-x-1/2 overflow-visible"
-          >
-            {/* dashed base */}
-            <line
-              x1={1}
-              y1={0}
-              x2={1}
-              y2={24}
-              stroke={ARROW_DIM}
-              strokeWidth={1}
-              strokeDasharray="3 3"
-              vectorEffect="non-scaling-stroke"
-            />
-            {/* bright pulse (pathLength=100 normalizes the dash math) */}
-            <line
-              x1={1}
-              y1={24}
-              x2={1}
-              y2={0}
-              stroke={accent}
-              strokeWidth={2}
-              strokeLinecap="round"
-              pathLength={100}
-              className="stack-pulse"
-              style={{
-                animationDelay: `${delay + i * 0.25}s`,
-                filter: `drop-shadow(0 0 4px ${accent}cc)`,
-              }}
-              vectorEffect="non-scaling-stroke"
-            />
-            {/* arrowhead at top */}
-            <polygon
-              points="-3,4 1,0 5,4"
-              fill={accent}
-              style={{ filter: `drop-shadow(0 0 2px ${accent}88)` }}
-            />
-          </svg>
-        </div>
-      ))}
+    <div className="relative h-full w-full">
+      <svg
+        viewBox="0 0 10 40"
+        preserveAspectRatio="none"
+        className="absolute inset-0 h-full w-full overflow-visible"
+      >
+        {/* dim base */}
+        <line
+          x1="5" y1="0" x2="5" y2="40"
+          stroke={ARROW_DIM}
+          strokeWidth={1}
+          strokeDasharray="2 3"
+          vectorEffect="non-scaling-stroke"
+        />
+        {/* halo */}
+        <line
+          x1="5" y1="0" x2="5" y2="36"
+          stroke={color}
+          strokeWidth={5}
+          strokeLinecap="round"
+          pathLength={100}
+          className="flow-line-halo"
+          style={{ animationDelay: `${delay}s` }}
+          vectorEffect="non-scaling-stroke"
+        />
+        {/* main bright pulse */}
+        <line
+          x1="5" y1="0" x2="5" y2="36"
+          stroke={color}
+          strokeWidth={2.5}
+          strokeLinecap="round"
+          pathLength={100}
+          className="flow-line"
+          style={{
+            animationDelay: `${delay}s`,
+            filter: `drop-shadow(0 0 4px ${color})`,
+          }}
+          vectorEffect="non-scaling-stroke"
+        />
+        {/* arrowhead pointing down */}
+        <polygon
+          points="1,36 9,36 5,40"
+          fill={color}
+          style={{ filter: `drop-shadow(0 0 3px ${color}cc)` }}
+        />
+      </svg>
     </div>
   );
 }
 
-/* ── Layer shell ─────────────────────────────────────────────────────────── */
+/* ── Layer shell ────────────────────────────────────────────────────────
+ * Wide horizontal band. Fixed-width left label column, flexible content,
+ * fixed-width right deploy annotation. `emphasis="strong"` tints the
+ * border with a subtle info-blue for the three agent VM layers. */
 
 function Layer({
   index,
   name,
   meta,
   deploy,
-  children,
   delay = 0,
+  children,
   emphasis = "normal",
 }: {
   index: string;
   name: string;
   meta?: string;
   deploy?: string;
-  children: ReactNode;
   delay?: number;
+  children: ReactNode;
   emphasis?: "normal" | "strong";
 }) {
-  const strongStyle = emphasis === "strong"
-    ? "border-[color-mix(in_oklab,var(--color-info)_45%,var(--color-border))] bg-[color-mix(in_oklab,var(--color-info)_8%,var(--color-surface))]"
-    : "";
+  const borderStyle =
+    emphasis === "strong"
+      ? { borderColor: "color-mix(in oklab, var(--color-info) 35%, var(--color-border))" }
+      : undefined;
   return (
     <motion.div
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.28, delay, ease: EASE_OUT }}
-      className={`relative flex min-h-0 flex-1 items-stretch gap-0 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] ${strongStyle}`}
+      initial={{ opacity: 0, y: 6, scale: 0.985 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.3, delay, ease: EASE_OUT }}
+      className="relative flex min-h-0 flex-1 items-stretch overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]"
+      style={borderStyle}
     >
-      {/* left label column */}
       <div className="flex w-[160px] flex-none flex-col justify-center gap-0.5 border-r border-[var(--color-border)] px-4">
         <div className="font-mono text-[9px] uppercase tracking-[0.22em] text-[var(--color-text-subtle)]">
           Layer {index}
@@ -111,11 +117,7 @@ function Layer({
           </div>
         ) : null}
       </div>
-
-      {/* content */}
       <div className="flex min-w-0 flex-1 items-stretch">{children}</div>
-
-      {/* deploy annotation column (right) */}
       <div className="flex w-[170px] flex-none flex-col items-end justify-center gap-0.5 border-l border-[var(--color-border)] px-4 text-right">
         {deploy ? (
           <>
@@ -126,23 +128,54 @@ function Layer({
               {deploy}
             </div>
           </>
-        ) : (
-          <div className="font-mono text-[10px] text-[var(--color-text-subtle)]">
-            local · CI
-          </div>
-        )}
+        ) : null}
       </div>
     </motion.div>
   );
 }
 
-/* ── Content helpers ─────────────────────────────────────────────────────── */
+/* ── SourceCard (one per external feed, inside Layer 01) ────────────── */
+
+function SourceCard({
+  name,
+  feed,
+  color,
+  delay = 0,
+}: {
+  name: string;
+  feed: string;
+  color: string;
+  delay?: number;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 4, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.26, delay, ease: EASE_OUT }}
+      className="relative flex min-w-0 flex-1 flex-col justify-center gap-0.5 overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-surface-raised)] px-3 py-2"
+      style={{ boxShadow: `inset 3px 0 0 0 ${color}, 0 0 0 1px ${color}1C` }}
+    >
+      <div className="text-[12px] font-medium leading-tight text-[var(--color-text)]">
+        {name}
+      </div>
+      <div className="font-mono text-[10px] uppercase tracking-[0.1em] leading-tight text-[var(--color-text-subtle)]">
+        {feed}
+      </div>
+    </motion.div>
+  );
+}
+
+/* ── Pill helper ─────────────────────────────────────────────────────── */
 
 function Pill({ children, accent }: { children: ReactNode; accent?: string }) {
   return (
     <span
-      className="inline-flex items-center gap-1.5 rounded border border-[var(--color-border)] bg-[var(--color-surface-raised)] px-2 py-0.5 font-mono text-[10px] text-[var(--color-text)]"
-      style={accent ? { borderLeft: `2px solid ${accent}` } : undefined}
+      className="inline-flex items-center rounded border border-[var(--color-border)] bg-[var(--color-surface-raised)] px-2 py-0.5 font-mono text-[10px] text-[var(--color-text)]"
+      style={
+        accent
+          ? { borderLeftColor: accent, borderLeftWidth: 2, borderLeftStyle: "solid" }
+          : undefined
+      }
     >
       {children}
     </span>
@@ -150,58 +183,72 @@ function Pill({ children, accent }: { children: ReactNode; accent?: string }) {
 }
 
 function Mono({ children }: { children: ReactNode }) {
-  return (
-    <span className="font-mono text-[11px] text-[var(--color-text)]">{children}</span>
-  );
+  return <span className="font-mono text-[11px] text-[var(--color-text)]">{children}</span>;
 }
 
 function Muted({ children }: { children: ReactNode }) {
-  return <span className="text-[var(--color-text-muted)]">{children}</span>;
+  return <span className="text-[11px] text-[var(--color-text-muted)]">{children}</span>;
 }
 
-function AgentCard({
-  color,
-  name,
-  model,
-  lines,
-}: {
-  color: string;
-  name: string;
-  model: string;
-  lines: ReactNode[];
-}) {
+/* ── Connector rows ─────────────────────────────────────────────────── */
+
+/* Single centered arrow (used between solo layers 02→07). */
+function SingleArrow({ delay, color }: { delay: number; color: string }) {
   return (
-    <div
-      className="relative flex min-w-0 flex-1 flex-col gap-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-raised)] p-3"
-      style={{
-        boxShadow: `inset 2px 0 0 0 ${color}, 0 0 0 1px ${color}22`,
-      }}
-    >
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[13px] font-medium" style={{ color }}>
-          {name}
-        </span>
-        <span className="font-mono text-[10px] text-[var(--color-text-subtle)]">{model}</span>
+    <div className="flex h-7 flex-none items-stretch justify-center">
+      <div className="w-10">
+        <PulseLine delay={delay} color={color} />
       </div>
-      {lines.map((line, i) => (
-        <div key={i} className="text-[11px] leading-snug text-[var(--color-text-muted)]">
-          {line}
-        </div>
-      ))}
     </div>
   );
 }
 
-/* ── Page ─────────────────────────────────────────────────────────────────── */
+/* Fan of 5 arrows, one per source box in the row above. The outer
+ * left/right spacers match the Layer shell's 160px/170px label columns so
+ * each arrow sits directly under its source card. */
+function SourceFan({
+  sources,
+}: {
+  sources: { color: string; delay: number }[];
+}) {
+  return (
+    <div className="flex h-7 flex-none items-stretch">
+      <div className="w-[160px] flex-none" aria-hidden />
+      <div className="flex min-w-0 flex-1 items-stretch gap-2 px-2">
+        {sources.map((s, i) => (
+          <div key={i} className="relative min-w-0 flex-1">
+            <PulseLine delay={s.delay} color={s.color} />
+          </div>
+        ))}
+      </div>
+      <div className="w-[170px] flex-none" aria-hidden />
+    </div>
+  );
+}
+
+/* ── Page ────────────────────────────────────────────────────────────── */
 
 export default function StackPage() {
+  const sources = [
+    { name: "Tavily",     feed: "news",      color: "#A3BE8C" },
+    { name: "Tavily",     feed: "policy",    color: "#B48EAD" },
+    { name: "Tavily",     feed: "logistics", color: "#EBCB8B" },
+    { name: "Tavily",     feed: "macro",     color: "#D08770" },
+    { name: "Open-Meteo", feed: "weather",   color: "#5E81AC" },
+  ];
+
+  const fanDelays = sources.map((s, i) => ({
+    color: s.color,
+    delay: i * 0.22, // staggered entries so the 5 arrows read as continuous rain
+  }));
+
   return (
     <main className="flex h-screen w-screen flex-col overflow-hidden bg-[var(--color-bg)] text-[var(--color-text)]">
       {/* Header */}
       <motion.header
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ duration: 0.3, ease: EASE_OUT }}
+        transition={{ duration: 0.28, ease: EASE_OUT }}
         className="flex h-12 flex-none items-baseline justify-between border-b border-[var(--color-border)] px-6"
       >
         <div className="flex items-baseline gap-3">
@@ -213,9 +260,11 @@ export default function StackPage() {
           </h1>
         </div>
         <div className="flex items-baseline gap-6 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-subtle)]">
-          <span>data flows <span className="text-[var(--color-text)]">↑</span> upward</span>
           <span>
-            <span className="tnum text-[var(--color-text)]">6</span> layers
+            data flows <span className="text-[var(--color-text)]">↓</span> downward
+          </span>
+          <span>
+            <span className="tnum text-[var(--color-text)]">7</span> layers
           </span>
           <span>
             <span className="tnum text-[var(--color-text)]">3</span> agents
@@ -230,9 +279,164 @@ export default function StackPage() {
       </motion.header>
 
       {/* Diagram */}
-      <div className="mx-auto flex min-h-0 w-full max-w-[1440px] flex-1 flex-col gap-0 px-6 py-4">
-        {/* Layer 01 — Client */}
-        <Layer index="01" name="Client" meta="browser · Vercel" deploy="Vercel" delay={0.05}>
+      <div className="mx-auto flex min-h-0 w-full max-w-[1440px] flex-1 flex-col px-6 py-4">
+        {/* Layer 01 — External sources (5 sub-cards) */}
+        <Layer
+          index="01"
+          name="External sources"
+          meta="what the system reads"
+          deploy="external SaaS"
+          delay={0}
+        >
+          <div className="flex flex-1 items-stretch gap-2 px-2 py-2">
+            {sources.map((src, i) => (
+              <SourceCard
+                key={`${src.name}-${src.feed}`}
+                name={src.name}
+                feed={src.feed}
+                color={src.color}
+                delay={0.04 + i * 0.04}
+              />
+            ))}
+          </div>
+        </Layer>
+
+        {/* 5 arrows — one per source, each in its own accent color */}
+        <SourceFan sources={fanDelays} />
+
+        {/* Layer 02 — Data bus */}
+        <Layer
+          index="02"
+          name="Data bus"
+          meta="shared source of truth"
+          deploy="Dedalus DB VM"
+          delay={0.08}
+        >
+          <div className="flex flex-1 flex-wrap content-center items-center gap-3 px-4">
+            <span className="text-[14px] font-medium">Postgres 16</span>
+            <Muted>
+              <Mono>LISTEN / NOTIFY</Mono> · 14 tables
+            </Muted>
+            <div className="flex items-center gap-1 rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 font-mono text-[10px] text-[var(--color-text-muted)]">
+              <span className="text-[var(--color-cat-news)]">new_signal</span>
+              <span>→</span>
+              <span className="text-[var(--color-cat-weather)]">new_disruption</span>
+              <span>→</span>
+              <span className="text-[var(--color-cat-logistics)]">new_impact</span>
+              <span>→</span>
+              <span className="text-[var(--color-cat-policy)]">new_mitigation</span>
+              <span>→</span>
+              <span className="text-[var(--color-cat-macro)]">new_approval</span>
+            </div>
+            <div className="ml-auto flex flex-wrap items-center gap-1">
+              <Pill>SQLAlchemy 2.x</Pill>
+              <Pill>asyncpg</Pill>
+              <Pill>Alembic</Pill>
+            </div>
+          </div>
+        </Layer>
+
+        <SingleArrow delay={0.15} color="#A3BE8C" />
+
+        {/* Layer 03 — Scout VM */}
+        <Layer
+          index="03"
+          name="Scout VM"
+          meta="Python 3.12 · asyncio"
+          deploy="Dedalus VM #1"
+          delay={0.12}
+          emphasis="strong"
+        >
+          <div className="flex flex-1 flex-wrap content-center items-center gap-3 px-4">
+            <span className="text-[14px] font-medium" style={{ color: "#A3BE8C" }}>
+              Scout agent
+            </span>
+            <Pill accent="#8AB4F8">Gemini Flash</Pill>
+            <Muted>
+              5 parallel source loops — classifies, deduplicates (72h window), promotes to{" "}
+              <Mono>disruption</Mono>
+            </Muted>
+          </div>
+        </Layer>
+
+        <SingleArrow delay={0.35} color="#EBCB8B" />
+
+        {/* Layer 04 — Analyst VM */}
+        <Layer
+          index="04"
+          name="Analyst VM"
+          meta="Python 3.12 · asyncio"
+          deploy="Dedalus VM #2"
+          delay={0.16}
+          emphasis="strong"
+        >
+          <div className="flex flex-1 flex-wrap content-center items-center gap-3 px-4">
+            <span className="text-[14px] font-medium" style={{ color: "#EBCB8B" }}>
+              Analyst agent
+            </span>
+            <Pill accent="#8AB4F8">Gemini Pro</Pill>
+            <Muted>
+              LISTEN <Mono>new_disruption</Mono> → tool-calling loop over 7 parameterized reads →
+              emits <Mono>impact_reports</Mono>
+            </Muted>
+          </div>
+        </Layer>
+
+        <SingleArrow delay={0.55} color="#B48EAD" />
+
+        {/* Layer 05 — Strategist VM */}
+        <Layer
+          index="05"
+          name="Strategist VM"
+          meta="Python 3.12 · asyncio"
+          deploy="Dedalus VM #3"
+          delay={0.2}
+          emphasis="strong"
+        >
+          <div className="flex flex-1 flex-wrap content-center items-center gap-3 px-4">
+            <span className="text-[14px] font-medium" style={{ color: "#B48EAD" }}>
+              Strategist agent
+            </span>
+            <Pill accent="#8AB4F8">Gemini Pro</Pill>
+            <Pill accent="#FFB454">OpenClaw</Pill>
+            <Muted>
+              LISTEN <Mono>new_impact</Mono> → drafts 2–4 mitigation options + 3 comms each →
+              atomic DB mutations
+            </Muted>
+          </div>
+        </Layer>
+
+        <SingleArrow delay={0.75} color="#5E81AC" />
+
+        {/* Layer 06 — Edge */}
+        <Layer
+          index="06"
+          name="Edge"
+          meta="HTTP + WebSocket"
+          deploy="Dedalus VM #4"
+          delay={0.24}
+        >
+          <div className="flex flex-1 flex-wrap content-center items-center gap-1.5 px-4">
+            <Pill accent="#009688">FastAPI</Pill>
+            <Pill>uvicorn</Pill>
+            <Pill accent="#A78BFA">/ws/updates</Pill>
+            <Pill accent="#E92063">Pydantic v2</Pill>
+            <Pill accent="#E5484D">sql_guard</Pill>
+            <Pill>atomic approvals</Pill>
+            <Pill>OpenAPI → openapi-typescript</Pill>
+          </div>
+        </Layer>
+
+        <SingleArrow delay={0.95} color="#E8EAED" />
+
+        {/* Layer 07 — Client */}
+        <Layer
+          index="07"
+          name="Client"
+          meta="browser"
+          deploy="Vercel"
+          delay={0.28}
+        >
           <div className="flex flex-1 flex-wrap content-center items-center gap-1.5 px-4">
             <Pill accent="#E8EAED">Next.js 15</Pill>
             <Pill accent="#61DAFB">React 19</Pill>
@@ -248,163 +452,6 @@ export default function StackPage() {
             <Pill accent="#2EAD33">Playwright</Pill>
           </div>
         </Layer>
-
-        <VerticalPulse delay={0} />
-
-        {/* Layer 02 — Edge */}
-        <Layer index="02" name="Edge" meta="HTTP + WebSocket" deploy="Dedalus VM #4" delay={0.1}>
-          <div className="flex flex-1 flex-wrap content-center items-center gap-1.5 px-4">
-            <Pill accent="#009688">FastAPI</Pill>
-            <Pill>uvicorn</Pill>
-            <Pill accent="#A78BFA">/ws/updates</Pill>
-            <Pill accent="#E92063">Pydantic v2</Pill>
-            <Pill accent="#E5484D">sql_guard</Pill>
-            <Pill>Atomic approvals</Pill>
-            <Pill>OpenAPI → openapi-typescript</Pill>
-          </div>
-        </Layer>
-
-        <VerticalPulse delay={0.2} />
-
-        {/* Layer 03 — Agent swarm */}
-        <Layer
-          index="03"
-          name="Agent swarm"
-          meta="Python 3.12 · asyncio"
-          deploy="Dedalus VMs #1 / #2 / #3"
-          delay={0.15}
-          emphasis="strong"
-        >
-          <div className="flex flex-1 items-stretch gap-2 p-3">
-            <AgentCard
-              color="#A3BE8C"
-              name="Scout"
-              model="Gemini Flash"
-              lines={[
-                <>5 parallel source loops — <Muted>news 60s · weather 5m · policy 15m · logistics 10m · macro 30m</Muted></>,
-                <>classifies → deduplicates (72h window) → promotes to <Mono>disruption</Mono></>,
-              ]}
-            />
-            <AgentCard
-              color="#EBCB8B"
-              name="Analyst"
-              model="Gemini Pro"
-              lines={[
-                <>LISTENs on <Mono>new_disruption</Mono>; runs function-calling loop over 7 parameterized tools</>,
-                <>emits <Mono>impact_reports</Mono> + <Mono>affected_shipments</Mono> + reasoning trace</>,
-              ]}
-            />
-            <AgentCard
-              color="#B48EAD"
-              name="Strategist"
-              model="Gemini Pro"
-              lines={[
-                <>LISTENs on <Mono>new_impact</Mono>; drafts 2–4 mitigation options + 3 comms each</>,
-                <>all DB mutations through <Mono>OpenClaw</Mono> action layer</>,
-              ]}
-            />
-          </div>
-        </Layer>
-
-        <VerticalPulse count={3} delay={0.4} />
-
-        {/* Layer 04 — Data bus */}
-        <Layer
-          index="04"
-          name="Data bus"
-          meta="shared source of truth"
-          deploy="Dedalus VM DB"
-          delay={0.2}
-        >
-          <div className="flex flex-1 flex-col justify-center gap-1.5 px-4">
-            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <span className="text-[14px] font-medium">Postgres 16</span>
-              <Muted>
-                <span className="text-[11px]">14 tables · 30 ports / 50 suppliers / 40 SKUs / 200 POs / 500 shipments seeded</span>
-              </Muted>
-            </div>
-            <div className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 font-mono text-[10px] leading-[1.5] text-[var(--color-text-muted)]">
-              LISTEN/NOTIFY channels:{" "}
-              <span className="text-[var(--color-cat-news)]">new_signal</span> →{" "}
-              <span className="text-[var(--color-cat-weather)]">new_disruption</span> →{" "}
-              <span className="text-[var(--color-cat-logistics)]">new_impact</span> →{" "}
-              <span className="text-[var(--color-cat-policy)]">new_mitigation</span> →{" "}
-              <span className="text-[var(--color-cat-macro)]">new_approval</span>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              <Pill>SQLAlchemy 2.x async</Pill>
-              <Pill>asyncpg</Pill>
-              <Pill>Alembic migrations</Pill>
-              <Pill>structlog · trace_id</Pill>
-            </div>
-          </div>
-        </Layer>
-
-        <VerticalPulse count={2} delay={0.6} />
-
-        {/* Layer 05 — Inputs & AI */}
-        <Layer
-          index="05"
-          name="Inputs & AI"
-          meta="what the agents read"
-          deploy="external SaaS"
-          delay={0.25}
-        >
-          <div className="flex flex-1 items-stretch gap-2 p-3">
-            <div className="flex min-w-0 flex-1 flex-col gap-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-raised)] p-3">
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="text-[12px] font-medium text-[var(--color-text)]">External sources</span>
-                <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[var(--color-text-subtle)]">
-                  → Scout
-                </span>
-              </div>
-              <div className="text-[11px] leading-snug text-[var(--color-text-muted)]">
-                <span className="text-[var(--color-text)]">Tavily</span>{" "}
-                <Muted>news · policy · logistics · macro — tuned query library per source</Muted>
-              </div>
-              <div className="text-[11px] leading-snug text-[var(--color-text-muted)]">
-                <span className="text-[var(--color-text)]">Open-Meteo</span>{" "}
-                <Muted>weather · no auth · polls 30 ports + 50 supplier coords every 5 min</Muted>
-              </div>
-            </div>
-            <div className="flex min-w-0 flex-1 flex-col gap-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-raised)] p-3">
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="text-[12px] font-medium text-[var(--color-text)]">LLM reasoning</span>
-                <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[var(--color-text-subtle)]">
-                  → all 3 agents
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-1">
-                <Pill accent="#8AB4F8">Gemini 2.x Flash</Pill>
-                <Pill accent="#8AB4F8">Gemini 2.x Pro</Pill>
-                <Pill accent="#FFB454">OpenClaw</Pill>
-              </div>
-              <div className="text-[11px] leading-snug text-[var(--color-text-muted)]">
-                <Mono>response_schema</Mono> · <Mono>function_calling</Mono> · <Mono>cached_contents</Mono> · SQLite offline cache for demo
-              </div>
-            </div>
-          </div>
-        </Layer>
-
-        {/* Layer 06 — CI / DX (bottom strip, no pulse below) */}
-        <div className="pt-2">
-          <Layer index="06" name="CI / DX" meta="every commit" delay={0.3}>
-            <div className="flex flex-1 flex-wrap content-center items-center gap-1.5 px-4">
-              <Pill accent="#E8EAED">GitHub</Pill>
-              <Pill accent="#E8EAED">GitHub Actions</Pill>
-              <Pill accent="#EBCB8B">pre-commit</Pill>
-              <Pill accent="#E5484D">gitleaks</Pill>
-              <Pill accent="#DE52D9">uv</Pill>
-              <Pill accent="#D7FF64">ruff</Pill>
-              <Pill accent="#2A6DB0">mypy --strict</Pill>
-              <Pill accent="#4A8FD4">pytest</Pill>
-              <Pill accent="#2EAD33">Playwright</Pill>
-              <span className="ml-auto font-mono text-[10px] text-[var(--color-text-subtle)]">
-                green CI → Vercel + Dedalus deploys
-              </span>
-            </div>
-          </Layer>
-        </div>
       </div>
     </main>
   );

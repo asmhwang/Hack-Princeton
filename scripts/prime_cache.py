@@ -275,7 +275,7 @@ async def _run(scenarios: list[str], freeze: bool) -> int:
         return 2
 
     _PROMPT_CACHE_ACTIVE.parent.mkdir(parents=True, exist_ok=True)
-    llm = LLMClient(cache_path=_PROMPT_CACHE_ACTIVE, model="flash")
+    llm = LLMClient(cache_path=_PROMPT_CACHE_ACTIVE, model="pro")
 
     # Free-tier gemini-2.5-flash is capped at 5 req/min. Each scenario bursts
     # ~10-15 Gemini calls (classify + tool-loop + options + drafts), so we pace

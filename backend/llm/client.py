@@ -46,7 +46,7 @@ log = structlog.get_logger()
 # Gemini model slug aliases. Keep this tiny — add more as agents need them.
 _MODEL_ALIASES: dict[str, str] = {
     "flash": "gemini-flash-lite-latest",
-    "pro": "gemini-flash-lite-latest",
+    "pro": "gemini-2.5-flash",
 }
 
 _FENCE_RE = re.compile(r"^\s*```(?:json)?\s*|\s*```\s*$", re.MULTILINE)

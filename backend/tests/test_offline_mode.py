@@ -321,21 +321,7 @@ def _expected_analyst_key(scenario_id: str) -> str:
 )
 @pytest.mark.parametrize(
     "scenario_id",
-    [
-        "typhoon_kaia",
-        "busan_strike",
-        pytest.param(
-            "cbam_tariff",
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason="Gemini deterministically returns neither function_calls nor text "
-                "for this disruption (2026-04-18 re-prime). Analyst falls back offline; "
-                "Strategist skips. Unrelated to cache-key alignment — tracked separately.",
-            ),
-        ),
-        "luxshare_fire",
-        "redsea_advisory",
-    ],
+    ["typhoon_kaia", "busan_strike", "cbam_tariff", "luxshare_fire", "redsea_advisory"],
 )
 def test_primed_analyst_key_matches_scenario(scenario_id: str) -> None:
     import sqlite3

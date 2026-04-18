@@ -1,0 +1,51 @@
+[project]
+name = "suppl-ai"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.32",
+  "sqlalchemy[asyncio]>=2.0.36",
+  "asyncpg>=0.30",
+  "alembic>=1.14",
+  "pydantic>=2.10",
+  "pydantic-settings>=2.7",
+  "structlog>=24.4",
+  "tenacity>=9.0",
+  "google-genai>=0.3",
+  "httpx>=0.28",
+  # openclaw  # TODO: set after Eragon provides install path
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3",
+  "pytest-asyncio>=0.24",
+  "pytest-postgresql>=6.1",
+  "pytest-httpx>=0.35",
+  "ruff>=0.8",
+  "mypy>=1.13",
+  "types-pyyaml",
+  "pre-commit>=4.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E","F","I","UP","B","SIM","ASYNC","PL"]
+ignore = ["PLR0913"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_ignores = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["backend/tests","backend/agents/*/tests"]

@@ -25,7 +25,7 @@ import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, TypeVar, cast
 
 import structlog
 from google import genai
@@ -42,11 +42,13 @@ from backend.llm.prompt_cache import PromptCache
 
 log = structlog.get_logger()
 
+_T = TypeVar("_T")
+
 
 # Gemini model slug aliases. Keep this tiny — add more as agents need them.
 _MODEL_ALIASES: dict[str, str] = {
     "flash": "gemini-flash-lite-latest",
-    "pro": "gemini-flash-lite-latest",
+    "pro": "gemini-2.5-flash",
 }
 
 _FENCE_RE = re.compile(r"^\s*```(?:json)?\s*|\s*```\s*$", re.MULTILINE)
@@ -171,6 +173,35 @@ def _strip_fences(raw: str) -> str:
     return _FENCE_RE.sub("", raw).strip()
 
 
+def _resolve_api_keys(explicit: str | None) -> list[str]:
+    """Resolve API keys from explicit arg, ``GEMINI_API_KEYS`` (comma-separated,
+    preferred for rotation), or ``GEMINI_API_KEY`` (single-key fallback).
+
+    Empty/whitespace entries are stripped. Order is preserved — earlier keys
+    are tried first and rotation advances left-to-right.
+    """
+    if explicit:
+        return [explicit]
+    multi = os.environ.get("GEMINI_API_KEYS", "")
+    if multi.strip():
+        keys = [k.strip() for k in multi.split(",") if k.strip()]
+        if keys:
+            return keys
+    single = os.environ.get("GEMINI_API_KEY", "").strip()
+    return [single] if single else []
+
+
+def _is_quota_exhausted(err: Exception) -> bool:
+    """Detect Gemini 429 RESOURCE_EXHAUSTED responses.
+
+    google-genai raises a generic Exception whose ``str()`` contains the JSON
+    payload. Match on both the HTTP status and the gRPC status name for
+    robustness across SDK versions.
+    """
+    msg = str(err)
+    return "429" in msg or "RESOURCE_EXHAUSTED" in msg
+
+
 def _schema_fingerprint(schema: type[BaseModel]) -> str:
     return hashlib.sha256(
         json.dumps(schema.model_json_schema(), sort_keys=True).encode()
@@ -187,12 +218,20 @@ class LLMClient:
     ) -> None:
         self._model_alias = model
         self._model_name = _MODEL_ALIASES.get(model, model)
-        self._api_key = api_key or os.environ.get("GEMINI_API_KEY")
+        self._api_keys = _resolve_api_keys(api_key)
+        self._key_idx = 0
         self._cache = PromptCache(cache_path)
         self._context_handles: dict[str, str] = {}
         # Defer SDK client construction — tests never need it, and importing
         # google.genai at module scope is already done for type references.
         self._client: Any | None = None
+
+    @property
+    def _api_key(self) -> str | None:
+        """Currently-active API key (for logging/tests)."""
+        if not self._api_keys:
+            return None
+        return self._api_keys[self._key_idx]
 
     # ------------------------------------------------------------------
     # Public surface
@@ -357,28 +396,30 @@ class LLMClient:
     # ------------------------------------------------------------------
 
     async def _raw_structured(self, *, prompt: str, schema: type[BaseModel]) -> str:
-        client = self._sdk_client()
+        async def _once() -> str:
+            client = self._sdk_client()
+            async for attempt in AsyncRetrying(
+                stop=stop_after_attempt(6),
+                wait=wait_exponential_jitter(initial=2, max=45),
+                retry=retry_if_exception_type(Exception),  # transport-level only
+                reraise=True,
+            ):
+                with attempt:
+                    resp = await client.aio.models.generate_content(
+                        model=self._model_name,
+                        contents=prompt,
+                        config=genai_types.GenerateContentConfig(
+                            response_mime_type="application/json",
+                            response_schema=cast(Any, _gemini_schema(schema)),
+                        ),
+                    )
+                    text = resp.text
+                    if text is None:
+                        raise LLMValidationError("Gemini returned no text body")
+                    return str(text)
+            raise LLMValidationError("unreachable: tenacity did not raise or return")
 
-        async for attempt in AsyncRetrying(
-            stop=stop_after_attempt(6),
-            wait=wait_exponential_jitter(initial=2, max=45),
-            retry=retry_if_exception_type(Exception),  # transport-level only
-            reraise=True,
-        ):
-            with attempt:
-                resp = await client.aio.models.generate_content(
-                    model=self._model_name,
-                    contents=prompt,
-                    config=genai_types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        response_schema=cast(Any, _gemini_schema(schema)),
-                    ),
-                )
-                text = resp.text
-                if text is None:
-                    raise LLMValidationError("Gemini returned no text body")
-                return str(text)
-        raise LLMValidationError("unreachable: tenacity did not raise or return")
+        return await self._with_key_rotation(_once)
 
     async def _raw_generate(
         self,
@@ -387,7 +428,6 @@ class LLMClient:
         tools: list[Tool],
         final_schema: type[BaseModel],
     ) -> _RawStep:
-        client = self._sdk_client()
         tool_decls: list[Any] = [
             genai_types.Tool(
                 function_declarations=[
@@ -402,29 +442,33 @@ class LLMClient:
         ]
         contents = _history_to_contents(history)
 
-        async for attempt in AsyncRetrying(
-            stop=stop_after_attempt(6),
-            wait=wait_exponential_jitter(initial=2, max=45),
-            retry=retry_if_exception_type(Exception),
-            reraise=True,
-        ):
-            with attempt:
-                # Gemini rejects response_mime_type + response_schema when tools
-                # are present ("Function calling with a response mime type: …
-                # is unsupported"). Final-schema validation happens client-side
-                # against the free-form text response in the parser layer.
-                resp = await client.aio.models.generate_content(
-                    model=self._model_name,
-                    contents=contents,
-                    config=genai_types.GenerateContentConfig(
-                        tools=cast(Any, tool_decls),
-                    ),
-                )
-                fn_calls = _extract_function_calls(resp)
-                if fn_calls:
-                    return _RawStep(function_calls=fn_calls, text=None)
-                return _RawStep(function_calls=None, text=resp.text)
-        raise LLMValidationError("unreachable: tenacity did not raise or return")
+        async def _once() -> _RawStep:
+            client = self._sdk_client()
+            async for attempt in AsyncRetrying(
+                stop=stop_after_attempt(6),
+                wait=wait_exponential_jitter(initial=2, max=45),
+                retry=retry_if_exception_type(Exception),
+                reraise=True,
+            ):
+                with attempt:
+                    # Gemini rejects response_mime_type + response_schema when
+                    # tools are present ("Function calling with a response mime
+                    # type is unsupported"). Final-schema validation happens
+                    # client-side against the free-form text response.
+                    resp = await client.aio.models.generate_content(
+                        model=self._model_name,
+                        contents=contents,
+                        config=genai_types.GenerateContentConfig(
+                            tools=cast(Any, tool_decls),
+                        ),
+                    )
+                    fn_calls = _extract_function_calls(resp)
+                    if fn_calls:
+                        return _RawStep(function_calls=fn_calls, text=None)
+                    return _RawStep(function_calls=None, text=resp.text)
+            raise LLMValidationError("unreachable: tenacity did not raise or return")
+
+        return await self._with_key_rotation(_once)
 
     async def _create_cached_context(self, content: str) -> str:
         client = self._sdk_client()
@@ -442,6 +486,43 @@ class LLMClient:
         if self._client is None:
             self._client = genai.Client(api_key=self._api_key)
         return self._client
+
+    async def _with_key_rotation(
+        self,
+        fn: Callable[[], Awaitable[_T]],
+    ) -> _T:
+        """Invoke ``fn`` with automatic key rotation on quota-exhaustion errors.
+
+        Gemini free-tier daily quotas return 429 RESOURCE_EXHAUSTED. Per-key
+        retry/backoff can't fix that — we need a different key. Callers with
+        multiple keys configured (via ``GEMINI_API_KEYS`` env, comma-separated)
+        get up to one pass per key before the last error propagates.
+        """
+        if len(self._api_keys) <= 1:
+            return await fn()
+
+        last_err: Exception | None = None
+        for cycle in range(len(self._api_keys)):
+            try:
+                return await fn()
+            except Exception as err:  # noqa: BLE001 — we inspect and re-raise
+                last_err = err
+                if not _is_quota_exhausted(err):
+                    raise
+                if cycle + 1 >= len(self._api_keys):
+                    raise
+                prev_idx = self._key_idx
+                self._key_idx = (self._key_idx + 1) % len(self._api_keys)
+                self._client = None
+                log.warning(
+                    "llm.api_key_rotated",
+                    from_idx=prev_idx,
+                    to_idx=self._key_idx,
+                    reason="quota_exhausted",
+                )
+        # Exhausted every key — re-raise whatever the last one hit.
+        assert last_err is not None
+        raise last_err
 
 
 def _history_to_contents(history: list[_HistoryItem]) -> list[Any]:

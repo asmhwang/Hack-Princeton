@@ -267,15 +267,17 @@ async def _run(scenarios: list[str], freeze: bool) -> int:
         )
         return 2
 
-    if not os.environ.get("GEMINI_API_KEY"):
+    if not os.environ.get("GEMINI_API_KEY") and not os.environ.get("GEMINI_API_KEYS"):
         print(
-            "error: GEMINI_API_KEY is not set. Export it before running.",
+            "error: neither GEMINI_API_KEY nor GEMINI_API_KEYS is set. Export "
+            "one before running (GEMINI_API_KEYS is comma-separated for "
+            "quota-failover rotation).",
             file=sys.stderr,
         )
         return 2
 
     _PROMPT_CACHE_ACTIVE.parent.mkdir(parents=True, exist_ok=True)
-    llm = LLMClient(cache_path=_PROMPT_CACHE_ACTIVE, model="flash")
+    llm = LLMClient(cache_path=_PROMPT_CACHE_ACTIVE, model="pro")
 
     # Free-tier gemini-2.5-flash is capped at 5 req/min. Each scenario bursts
     # ~10-15 Gemini calls (classify + tool-loop + options + drafts), so we pace

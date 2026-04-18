@@ -8,84 +8,94 @@
 
 ## Tasks owned
 
-| # | Task | Source | Strict TDD? | Approx effort |
+| # | Task | Source | Status | Merged at |
 |---|---|---|---|---|
-| A.1 | **2.3** Event bus (LISTEN/NOTIFY + reconnect) | master plan | **yes** — test reconnect on dropped conn | 2h |
-| A.2 | **2.4** LLM client (Gemini structured + tool-calling + cache) | master | **yes** — test cache hit, retry, schema validation | 3h |
-| A.3 | **2.5** Agent base class (lifecycle + checkpoint + health) | master | **yes** — test checkpoint restore | 2h |
-| A.4 | **5.1–5.12** Scout agent (dedupe, severity, classify, fusion, 5 sources, main) | master | **partial** — strict for dedupe + severity; light for sources | 8h |
-| A.5 | **6.1–6.3** Analyst agent (tool loop + impact processor, fallback, main) | master | **yes** — test tool loop produces valid report | 5h |
-| A.6 | **7.1–7.4** Strategist agent (options, drafts, OpenClaw, main) | master | **light** | 5h |
-| A.7 | **12.1, 12.3, 12.4** Dedalus VMs + systemd units + offline cache priming + restart persistence | master | milestone | 3h |
+| A.1 | **2.3** Event bus (LISTEN/NOTIFY + reconnect) | master plan | ✅ done | f288bfa |
+| A.2 | **2.4** LLM client (Gemini structured + tool-calling + cache) | master | ✅ done | f921e31 |
+| A.3 | **2.5** Agent base class (lifecycle + checkpoint + health) | master | ✅ done | b02bcad |
+| A.4 | **5.1–5.12** Scout agent (dedupe, severity, classify, fusion, 5 sources, main) | master | ✅ done | d1c49bf (main wiring), 9f36bf8 (sources), b63b7a5 (weather), plus processor commits |
+| A.5 | **6.1–6.3** Analyst agent (tool loop + impact processor, fallback, main) | master | ✅ done | 886f425, bee27d9, 85ee6a9 |
+| A.6 | **7.1–7.4** Strategist agent (options, drafts, OpenClaw actions, main) | master | ✅ done | 9d87738 |
+| A.7 | **12.1, 12.3, 12.4** Dedalus VMs + systemd + offline cache priming + restart persistence | master | 🚧 in progress — see below |
 
-**Total est:** ~28h focused. Parallelizable: nothing (each depends on the prior).
+## A.7 breakdown (remaining work)
 
-## What you SHIP to others
+A.7 splits cleanly into two disjoint tracks. Partial progress already landed at cf19e06 (systemd units + smoke).
 
-- **Event bus implementation** (`backend/db/bus.py`) — Plan C's WebSocket relay consumes this for `/ws/updates`.
-- **Agent base class** (`backend/agents/base.py`) — nobody consumes directly, but it's part of the mypy-strict gate.
-- **`NOTIFY` events on the 5 channels** — Plan C's WebSocket relay forwards these to the frontend. Payload format is frozen in the coordination doc.
-- **Agent writes to DB** — Plan B's UI reads via Plan C's API; you don't talk to UI directly.
+### A.7.a — Dedalus infra + restart persistence (Tasks 12.1 + 12.3)
 
-## What you CONSUME from others
+**Branch:** `a/infra-dedalus`
+**Worktree:** `../hp-infra-dedalus`
+**Files owned:** `infra/**`, `scripts/smoke.py`, `scripts/restart_persistence_test.py`
+**Est:** ~1.5h
 
-- **`backend/schemas/*.py`** (Pydantic models) — from Plan C (Task 2.1). Blocks A.5 (Analyst needs `ImpactReport` schema) and A.6 (Strategist needs `MitigationOption` + `DraftCommunication` schemas).
-- **SQL defense-in-depth validator** (`backend/api/validators/sql_guard.py`) — from Plan C (Task 2.2). A.5 uses it when storing `impact_reports.sql_executed`.
-- **Analyst query tools** (`backend/llm/tools/analyst_tools.py`) — from Plan C (Task 2.6). A.5 feeds these into the Gemini tool-calling loop.
-- **OpenAPI spec** — indirectly, via Plan C ensuring FastAPI routes compile.
+- [ ] Provision 4 Machines via Dedalus SDK: `scout-vm`, `analyst-vm`, `strategist-vm`, `db-vm`. Default tier.
+- [ ] Verify systemd units under `infra/` (already landed at cf19e06) — rerun + document.
+- [ ] `scripts/smoke.py` hits `/health` on each agent VM + `/health` on API.
+- [ ] `scripts/restart_persistence_test.py` — `systemctl stop supplai-<agent>` during demo run → `systemctl start` → assert no duplicate signals, cursors resumed, `state.json` matches.
+- [ ] Update `README.md` with "three VMs running live" screenshot section.
 
-## Sequencing
+### A.7.b — Offline cache priming + demo scenario fixtures (Task 12.4)
 
-```
-A.1 Event bus  → A.2 LLM client  → A.3 Agent base
-                                       ↓
-     (wait for C.1 schemas + C.2 SQL guard + C.5 tools) → A.4 Scout → A.5 Analyst → A.6 Strategist → A.7 Infra
-```
+**Branch:** `a/offline-cache`
+**Worktree:** `../hp-offline-cache`
+**Files owned:** `scripts/prime_cache.py`, `backend/llm/*.sqlite.seed`, `scripts/simulate.py`, `backend/tests/test_offline_mode.py`
+**Est:** ~1.5h
 
-**Start immediately with A.1 + A.2 + A.3** — those don't need anything from C/B.
+- [ ] For each of 5 demo scenarios (typhoon / strike / CBAM / Red Sea / earthquake per PRD §15.1), run end-to-end once with live Gemini + live Tavily. Cache auto-populates `backend/llm/prompt_cache.sqlite`.
+- [ ] Freeze to seed files: `backend/llm/prompt_cache.sqlite.seed` + `backend/llm/tavily_cache.sqlite.seed` (may have per-source variants).
+- [ ] VM bootstrap loads seeds if `DEMO_OFFLINE_CACHE=true` (belongs in `infra/bootstrap_*.sh`).
+- [ ] `backend/tests/test_offline_mode.py` — asserts the typhoon scenario runs end-to-end through Scout → Analyst → Strategist with all external APIs stubbed to raise, using only seeded cache.
+- [ ] **Side task:** investigate + fix `test_analyst_main::test_notify_new_disruption_triggers_impact_report` flake (SQLAlchemy NoResultFound — LISTEN/NOTIFY race). Root-cause before patching.
+- [ ] `grep -r "smtplib\|sendmail\|smtp" backend/` — assert empty. Add a pytest collection hook or CI step that fails if any SMTP import sneaks back.
 
-## Quick start
+## Parallel execution
 
-```bash
-git checkout main
-git pull
-git checkout -b a/event-bus
-# Implement Task 2.3 per master plan's spec (including TDD test file).
-uv sync --all-groups
-uv run pytest backend/db/tests/test_bus.py -v   # should fail first
-# Implement
-uv run pytest backend/db/tests/test_bus.py -v   # should pass
-git push -u origin a/event-bus
-# Open PR to main.
-```
+Both A.7.a and A.7.b run in parallel. Zero file overlap. Merge order: either first, the other follows with a rebase (trivial).
 
-## Safety-critical tests (must be green before merge)
+## What has been SHIPPED to others
 
-- **Event bus:** `test_publish_subscribe_roundtrip`, `test_survives_connection_drop` — per Task 2.3.
-- **LLM client:** `test_structured_returns_model`, `test_structured_retries_once_on_validation`, `test_offline_cache_short_circuits` — per Task 2.4.
-- **Agent base:** `test_checkpoint_survives_restart` — per Task 2.5.
-- **Scout dedupe:** two identical `(region, category, keywords)` within 72h → second rejected. Third 73h later accepted.
-- **Scout severity:** 8 parametrized cases covering each rubric branch.
+- **Event bus** (`backend/db/bus.py`) → Plan C WebSocket relay consumes it at `/ws/updates`.
+- **Agent base class** (`backend/agents/base.py`) — mypy-strict.
+- **`NOTIFY` events on 5 channels** → Plan C relay forwards to frontend.
+- **Agent writes to DB** → Plan B UI reads via Plan C's API.
+- **Scout/Analyst/Strategist main processes** — each runs as `uv run python -m backend.agents.<name>.main`.
 
 ## Definition of done
 
-- [ ] A.1–A.3 all merged; mypy strict on `backend/db/bus.py`, `backend/llm/client.py`, `backend/agents/base.py`.
-- [ ] All 5 Scout sources produce classified+deduped signals locally with offline cache.
-- [ ] Typhoon scenario: `NOTIFY new_disruption` triggers Analyst → impact report within 30s.
-- [ ] Typhoon impact triggers Strategist → ≥2 mitigations + 3 drafts per mitigation within 45s.
-- [ ] All 3 agents run as systemd services on Dedalus VMs; `systemctl stop + start` resumes from checkpoint without duplicate signals.
-- [ ] `grep -r "smtplib" backend/` returns empty (demo-day gate).
-- [ ] Offline cache primed for all 5 demo scenarios.
+- [x] A.1–A.6 all merged. mypy strict clean on shared modules.
+- [x] All 5 Scout sources produce classified + deduped signals locally with offline cache.
+- [ ] Typhoon scenario end-to-end runs on Dedalus VMs with `DEMO_OFFLINE_CACHE=true`.
+- [ ] `systemctl stop + start` resumes from checkpoint without duplicate signals (A.7.a test).
+- [ ] `grep -r "smtplib" backend/` empty (A.7.b gate).
+- [ ] Offline cache seeded for all 5 scenarios (A.7.b).
+- [ ] Analyst NOTIFY flake fixed or root-caused + skipped with issue reference (A.7.b).
 
-## Known blockers
+## Resolved blockers
 
-- **OpenClaw package** — not on PyPI as `openclaw`. See `docs/runbook.md`. Task A.6 is blocked on Eragon providing install path. If blocked at hour 24, fall back to plain Python action layer wrapping the same DB mutations — still demonstrates depth-of-action for the Eragon rubric (see PRD §13.2).
-- **Gemini 2.x function-calling** — newer SDK. If `google-genai>=0.3` has a different API than the plan assumes, adjust `LLMClient.with_tools` and document. Don't fight it.
+- **OpenClaw package** — turned out NOT to be a PyPI package. OpenClaw is a Node.js self-hosted gateway running on `strategist-vm`. Strategist talks to it via HTTP and/or uses a direct action layer under `backend/agents/strategist/actions/` (see 9d87738). Eragon rubric still satisfied via the action layer depth. See `docs/runbook.md` for the corrected install path once A.7.a runs the bootstrap.
+- **Gemini 2.x function-calling** — `google-genai>=0.3` SDK used, adjusted in `backend/llm/client.py`.
 
-## Escalation signals
+## Escalation signals (still live for A.7)
 
-Stop and raise if you hit any of these — don't silently work around:
-- Tavily rate limit → swap to offline cache, do NOT change source cadence to work around it
-- Gemini consistently returns invalid JSON → check `response_schema` binding; do not disable retry; ask for help
-- PG LISTEN not receiving payloads → check reconnect loop; ensure `publish()` uses one-shot conn per coordination doc
-- OpenClaw available but API differs from `annyzhou/openclaw-ddls` reference — ping Teammate C + check Eragon docs
+- Dedalus VM provisioning hits `NoReadyHosts` — delete orphans to free slots or shrink memory request.
+- `state.json` lost across restart — check `StateDirectory=supplai` in systemd unit.
+- Offline seed file >100 MB — move to git-lfs or prune low-value cache entries.
+
+## Quick start for remaining tracks
+
+```bash
+# A.7.a
+cd ../hp-infra-dedalus
+uv sync --all-groups
+# implement, test with DEDALUS_API_KEY in .env.local
+git push -u origin a/infra-dedalus
+# open PR
+
+# A.7.b
+cd ../hp-offline-cache
+uv sync --all-groups
+# run live scenarios once, freeze seeds
+git push -u origin a/offline-cache
+# open PR
+```

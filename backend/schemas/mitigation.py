@@ -80,3 +80,20 @@ class DraftCommunicationRecord(BaseModel):
         if v is not None:
             raise ValueError("sent_at must be NULL — drafts are never sent")
         return v
+
+
+class MitigationWithDrafts(BaseModel):
+    """MitigationOptionRecord extended with its draft communications."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+    impact_report_id: uuid.UUID
+    option_type: MitigationOptionType
+    description: str
+    delta_cost: Decimal
+    delta_days: int
+    confidence: float
+    rationale: str
+    status: MitigationStatus
+    drafts: list[DraftCommunicationRecord]

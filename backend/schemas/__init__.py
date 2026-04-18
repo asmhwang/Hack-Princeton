@@ -1,9 +1,11 @@
+from .analytics import ExposureBucket
 from .approval import ApprovalRecord, ApprovalRequest, ApprovalResponse, StateSnapshot
 from .disruption import DisruptionCategory, DisruptionDraft, DisruptionRecord, DisruptionStatus
 from .impact import (
     AffectedShipmentEntry,
     ImpactReport,
     ImpactReportRecord,
+    ImpactReportWithShipments,
     ReasoningTrace,
     ToolInvocation,
 )
@@ -16,6 +18,7 @@ from .mitigation import (
     MitigationOptionsBundle,
     MitigationOptionType,
     MitigationStatus,
+    MitigationWithDrafts,
     RecipientType,
 )
 from .signal import SignalClassification, SignalRecord, SourceCategory
@@ -33,12 +36,14 @@ __all__ = [
     "ReasoningTrace",
     "ImpactReport",
     "ImpactReportRecord",
+    "ImpactReportWithShipments",
     "MitigationOptionType",
     "MitigationStatus",
     "RecipientType",
     "MitigationOption",
     "MitigationOptionsBundle",
     "MitigationOptionRecord",
+    "MitigationWithDrafts",
     "DraftCommunication",
     "DraftCommunicationBundle",
     "DraftCommunicationRecord",
@@ -46,4 +51,5 @@ __all__ = [
     "ApprovalRecord",
     "ApprovalRequest",
     "ApprovalResponse",
+    "ExposureBucket",
 ]

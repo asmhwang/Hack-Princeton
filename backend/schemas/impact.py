@@ -54,3 +54,19 @@ class ImpactReportRecord(BaseModel):
     sql_executed: str | None
     reasoning_trace: ReasoningTrace
     generated_at: datetime
+
+
+class ImpactReportWithShipments(BaseModel):
+    """ImpactReportRecord extended with its affected shipments list."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+    disruption_id: uuid.UUID
+    total_exposure: Decimal
+    units_at_risk: int
+    cascade_depth: int
+    sql_executed: str | None
+    reasoning_trace: ReasoningTrace
+    generated_at: datetime
+    affected_shipments: list[AffectedShipmentEntry]

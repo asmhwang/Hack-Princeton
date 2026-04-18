@@ -42,7 +42,9 @@ os.environ["DATABASE_URL"] = _TEST_DSN_SQLALCHEMY
 
 _TRUNCATE_SQL = (
     "TRUNCATE ports, suppliers, skus, customers, "
-    "purchase_orders, shipments "
+    "purchase_orders, shipments, "
+    "signals, disruptions, impact_reports, affected_shipments, "
+    "mitigation_options, draft_communications, approvals, agent_log "
     "RESTART IDENTITY CASCADE"
 )
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from typing import Annotated
 
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,5 +18,5 @@ def current_user() -> str:
     return "maya_chen"
 
 
-SessionDep = Depends(get_session)
-UserDep = Depends(current_user)
+SessionDep = Annotated[AsyncSession, Depends(get_session)]
+UserDep = Annotated[str, Depends(current_user)]

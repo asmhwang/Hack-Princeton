@@ -38,6 +38,9 @@ target-version = "py312"
 select = ["E","F","I","UP","B","SIM","ASYNC","PL"]
 ignore = ["PLR0913"]
 
+[tool.ruff.lint.per-file-ignores]
+"backend/tests/**" = ["PLR2004"]  # magic numbers (HTTP status codes) are idiomatic in tests
+
 [tool.ruff.format]
 quote-style = "double"
 

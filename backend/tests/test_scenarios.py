@@ -42,7 +42,7 @@ _VALID_DISRUPTION_CATEGORIES: set[str] = set(DisruptionCategory.__args__)  # typ
 
 @pytest.mark.parametrize("scenario_id", _EXPECTED_IDS)
 def test_scenario_signal_severity_in_range(scenario_id: str) -> None:
-    s: Scenario = SCENARIOS[scenario_id]  # type: ignore[assignment]
+    s: Scenario = SCENARIOS[scenario_id]
     assert 1 <= s.signal.severity <= 5, (
         f"{scenario_id}: signal.severity={s.signal.severity} not in [1,5]"
     )
@@ -50,7 +50,7 @@ def test_scenario_signal_severity_in_range(scenario_id: str) -> None:
 
 @pytest.mark.parametrize("scenario_id", _EXPECTED_IDS)
 def test_scenario_signal_confidence_in_range(scenario_id: str) -> None:
-    s: Scenario = SCENARIOS[scenario_id]  # type: ignore[assignment]
+    s: Scenario = SCENARIOS[scenario_id]
     assert 0 <= s.signal.confidence <= 1, (
         f"{scenario_id}: signal.confidence={s.signal.confidence} not in [0,1]"
     )
@@ -58,7 +58,7 @@ def test_scenario_signal_confidence_in_range(scenario_id: str) -> None:
 
 @pytest.mark.parametrize("scenario_id", _EXPECTED_IDS)
 def test_scenario_signal_source_category_valid(scenario_id: str) -> None:
-    s: Scenario = SCENARIOS[scenario_id]  # type: ignore[assignment]
+    s: Scenario = SCENARIOS[scenario_id]
     assert s.signal.source_category in _VALID_SOURCE_CATEGORIES, (
         f"{scenario_id}: signal.source_category='{s.signal.source_category}' invalid"
     )
@@ -66,7 +66,7 @@ def test_scenario_signal_source_category_valid(scenario_id: str) -> None:
 
 @pytest.mark.parametrize("scenario_id", _EXPECTED_IDS)
 def test_scenario_disruption_category_valid(scenario_id: str) -> None:
-    s: Scenario = SCENARIOS[scenario_id]  # type: ignore[assignment]
+    s: Scenario = SCENARIOS[scenario_id]
     assert s.disruption.category in _VALID_DISRUPTION_CATEGORIES, (
         f"{scenario_id}: disruption.category='{s.disruption.category}' invalid"
     )
@@ -74,7 +74,7 @@ def test_scenario_disruption_category_valid(scenario_id: str) -> None:
 
 @pytest.mark.parametrize("scenario_id", _EXPECTED_IDS)
 def test_scenario_expectation_ranges_consistent(scenario_id: str) -> None:
-    s: Scenario = SCENARIOS[scenario_id]  # type: ignore[assignment]
+    s: Scenario = SCENARIOS[scenario_id]
     exp = s.expected
     assert exp.affected_shipments_min <= exp.affected_shipments_max, (
         f"{scenario_id}: affected_shipments_min > max"
@@ -84,7 +84,7 @@ def test_scenario_expectation_ranges_consistent(scenario_id: str) -> None:
 
 @pytest.mark.parametrize("scenario_id", _EXPECTED_IDS)
 def test_scenario_id_field_matches_dict_key(scenario_id: str) -> None:
-    s: Scenario = SCENARIOS[scenario_id]  # type: ignore[assignment]
+    s: Scenario = SCENARIOS[scenario_id]
     assert s.id == scenario_id, f"SCENARIOS['{scenario_id}'].id='{s.id}' doesn't match dict key"
 
 
@@ -192,7 +192,7 @@ async def test_simulate_response_expected_matches_fixture(scenario_id: str) -> N
     body = r.json()
     assert "expected" in body
 
-    scenario: Scenario = SCENARIOS[scenario_id]  # type: ignore[assignment]
+    scenario: Scenario = SCENARIOS[scenario_id]
     fixture_expected = dataclasses.asdict(scenario.expected)
     assert body["expected"] == fixture_expected, (
         f"{scenario_id}: response expected mismatch.\n"

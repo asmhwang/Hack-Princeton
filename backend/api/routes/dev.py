@@ -17,6 +17,7 @@ from backend.db.models import Disruption, Signal
 from backend.db.session import DBSettings
 from backend.scripts.scenarios import SCENARIOS
 from backend.scripts.scenarios._types import Scenario
+from backend.scripts.scenarios.prime_chain import seed_prime_chain
 
 router = APIRouter()
 
@@ -74,9 +75,15 @@ async def simulate(
     Both notifies (new_signal + new_disruption) are emitted so that when the Analyst
     agent is wired up it will react to new_disruption and generate impact reports.
     """
-    scenario: Scenario = SCENARIOS[body.scenario]  # type: ignore[assignment]
+    scenario: Scenario = SCENARIOS[body.scenario]
     sig = scenario.signal
     dis = scenario.disruption
+
+    # Prime-chain backstop: seeds FK-valid Port/Supplier/SKU/Customer/POs/3 ships
+    # pinned at the disruption centroid. Matches prime_cache.py's prime-time
+    # seeding, so cached Analyst affected_shipments refs (SHP-PRIME-*) exist
+    # at demo time. Idempotent via ON CONFLICT DO NOTHING.
+    await seed_prime_chain(session, scenario)
 
     # Generate both IDs upfront so we can set up the bidirectional FK references
     # (signals.promoted_to_disruption_id ↔ disruptions.source_signal_ids) in a

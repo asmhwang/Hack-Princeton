@@ -1,19 +1,21 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import Select
+from sqlalchemy.orm.attributes import InstrumentedAttribute
 
 _MAX_LIMIT = 200
 
 
 def apply_cursor(
-    stmt: Select,  # type: ignore[type-arg]
+    stmt: Select[Any],
     *,
-    before_col: object,
+    before_col: InstrumentedAttribute[datetime],
     before: datetime | None,
     limit: int,
-) -> Select:  # type: ignore[type-arg]
+) -> Select[Any]:
     """Apply cursor-pagination to a SELECT statement.
 
     Args:

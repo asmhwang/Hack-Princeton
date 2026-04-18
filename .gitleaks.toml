@@ -12,5 +12,5 @@ tags = ["key","gemini"]
 [[rules]]
 id = "tavily-api-key"
 description = "Tavily API key"
-regex = '''tvly-[A-Za-z0-9]{32,}'''
+regex = '''tvly-(?:dev-|prod-)?[A-Za-z0-9]{32,}'''
 tags = ["key","tavily"]

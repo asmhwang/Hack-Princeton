@@ -260,6 +260,8 @@ class LLMClient:
 
         by_name: dict[str, Tool] = {t.name: t for t in tools}
         state = _LoopState(history=[_HistoryItem(role="user", content=prompt)])
+        empty_retries = 0
+        max_empty_retries = 2
 
         for _ in range(max_iters):
             step = await self._raw_generate(
@@ -268,6 +270,7 @@ class LLMClient:
                 final_schema=final_schema,
             )
             if step.function_calls:
+                empty_retries = 0
                 for name, args_dict in step.function_calls:
                     tool = by_name.get(name)
                     if tool is None:
@@ -299,7 +302,28 @@ class LLMClient:
                     ),
                 )
                 return final, state.trace
-            raise LLMValidationError("model returned neither function_calls nor text")
+            # Empty step: model returned neither function_calls nor text. Nudge
+            # it back on track within the remaining iteration budget instead of
+            # failing the whole loop — Gemini 2.x occasionally stalls on policy
+            # prompts without a clear tool to call on turn 1.
+            empty_retries += 1
+            if empty_retries > max_empty_retries:
+                raise LLMValidationError(
+                    f"model returned neither function_calls nor text "
+                    f"({empty_retries} consecutive empty steps)"
+                )
+            log.warning("llm.with_tools.empty_step_retry", attempt=empty_retries)
+            state.history.append(
+                _HistoryItem(
+                    role="user",
+                    content=(
+                        "Your last response was empty. You must either call one "
+                        "of the provided tools to gather data, or return a final "
+                        f"{final_schema.__name__} JSON object. Do not return an "
+                        "empty response."
+                    ),
+                )
+            )
 
         raise LLMValidationError(f"tool loop exceeded max_iters={max_iters}")
 

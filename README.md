@@ -215,6 +215,49 @@ Three long-running Python processes, each on its own Dedalus Machine (`scout-vm`
 
 Systemd unit files in `infra/` (courtesy of Plan A). Provisioning credits claimed at https://dedaluslabs.ai/hackprinceton-s26.
 
+#### Three VMs running live
+
+Bring the swarm up end-to-end with three commands:
+
+```bash
+# 1. Provision 4 Machines (idempotent; reuses existing by name)
+export DEDALUS_API_KEY=...
+uv run python infra/provision.py                # writes infra/machines.json
+
+# 2. Deploy each agent (rsync + systemctl enable --now)
+./infra/scripts/deploy.sh scout-vm scout
+./infra/scripts/deploy.sh analyst-vm analyst
+./infra/scripts/deploy.sh strategist-vm strategist
+
+# 3. Verify /health on every VM (exit 0 iff all green)
+uv run python scripts/smoke.py --inventory infra/machines.json
+```
+
+Sample output:
+
+```
+NAME         URL                              STATUS  OK    NOTE
+scout        http://scout-vm:9101/health      200     yes
+analyst      http://analyst-vm:9102/health    200     yes
+strategist   http://strategist-vm:9103/health 200     yes
+api          http://db-vm:8000/health         200     yes
+```
+
+**Judging gate — restart persistence (Task 12.3):**
+
+```bash
+uv run python scripts/restart_persistence_test.py --inventory infra/machines.json
+```
+
+Stops + starts each agent via `systemctl restart supplai-<agent>`, asserts the
+on-disk `state.json` is byte-identical across the restart, and then waits 30s
+to confirm no duplicate `content_hash` rows landed in `signals` — i.e. the
+agent resumed from the checkpoint cursor instead of replaying history.
+
+> Screenshot: `docs/screenshots/three-vms-live.png` (capture from the Dedalus
+> dashboard once provisioned; showing 4 green Machines — scout, analyst,
+> strategist, db).
+
 ### Eragon — OpenClaw
 
 Strategist wraps every DB mutation — supplier lookups, `draft_communications` writes, shipment status flips, audit log entries — in OpenClaw `Action` primitives (see `annyzhou/openclaw-ddls` reference). This is the judging requirement: "not chat; real work."

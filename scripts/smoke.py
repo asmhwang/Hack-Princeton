@@ -5,24 +5,32 @@ signals") and demo-day readiness. Exit 0 iff every target returns HTTP 200
 with ``{"ok": true}``. Exit 1 otherwise so CI / shell chains short-circuit.
 
 Usage:
+    # Explicit URLs
     uv run python scripts/smoke.py \\
         --scout http://scout-vm:9101/health \\
         --analyst http://analyst-vm:9102/health \\
         --strategist http://strategist-vm:9103/health \\
-        --api http://api-vm:8000/health
+        --api http://db-vm:8000/health
+
+    # Or resolve from provisioning inventory
+    uv run python scripts/smoke.py --inventory infra/machines.json
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 
 import httpx
 
 _TIMEOUT_S = 5.0
 _HTTP_OK = 200
+_AGENT_PORTS = {"scout": 9101, "analyst": 9102, "strategist": 9103}
+_API_PORT = 8000
 
 
 @dataclass
@@ -84,12 +92,31 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--analyst", help="Analyst /health URL")
     p.add_argument("--strategist", help="Strategist /health URL")
     p.add_argument("--api", help="API /health URL")
+    p.add_argument(
+        "--inventory",
+        help="Path to infra/machines.json from provision.py; resolves hosts automatically.",
+    )
     return p.parse_args(argv)
+
+
+def _from_inventory(path: Path) -> list[_Target]:
+    data = json.loads(path.read_text())
+    targets: list[_Target] = []
+    for agent, port in _AGENT_PORTS.items():
+        entry = data.get(f"{agent}-vm")
+        if entry and entry.get("host"):
+            targets.append(_Target(agent, f"http://{entry['host']}:{port}/health"))
+    db = data.get("db-vm")
+    if db and db.get("host"):
+        targets.append(_Target("api", f"http://{db['host']}:{_API_PORT}/health"))
+    return targets
 
 
 def main(argv: list[str] | None = None) -> int:
     ns = _parse_args(argv)
     targets: list[_Target] = []
+    if ns.inventory:
+        targets.extend(_from_inventory(Path(ns.inventory)))
     for name in ("scout", "analyst", "strategist", "api"):
         url = getattr(ns, name)
         if url:

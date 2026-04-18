@@ -32,3 +32,6 @@ backend/llm/*.sqlite
 
 # Git worktrees
 .worktrees/
+
+# Dedalus provisioning inventory (contains host addresses + machine IDs)
+infra/machines.json

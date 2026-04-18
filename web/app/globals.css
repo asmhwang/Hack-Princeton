@@ -61,39 +61,6 @@ html, body {
   font-feature-settings: 'tnum' 1;
 }
 
-/* Pulse-along-line animation used by /stack diagram.
- *
- * Path must be drawn in the DIRECTION of flow and have pathLength="100".
- * stroke-dashoffset 0 → -100 makes the bright dash move ALONG the path.
- * Because pathLength is normalized, all connectors share one keyframe
- * regardless of their actual pixel length.
- *
- * Two classes render in pairs on the same SVG path to create a "comet"
- * feel: the halo (wider stroke, blurred, translucent) sits behind the
- * sharp main dash, giving a glowing tail effect. Linear timing is correct
- * here per Emil — looping/constant motion should never ease. */
-@keyframes flow-pulse {
-  from { stroke-dashoffset: 0; }
-  to   { stroke-dashoffset: -100; }
-}
-.flow-line {
-  stroke-dasharray: 10 90;
-  animation: flow-pulse 1.8s linear infinite;
-}
-.flow-line-halo {
-  stroke-dasharray: 10 90;
-  animation: flow-pulse 1.8s linear infinite;
-  opacity: 0.45;
-  filter: blur(3px);
-}
-@media (prefers-reduced-motion: reduce) {
-  .flow-line,
-  .flow-line-halo {
-    animation: none;
-    opacity: 0;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.001ms !important;

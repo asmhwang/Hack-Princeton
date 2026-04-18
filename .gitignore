@@ -1,0 +1,31 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.uv_cache/
+dist/
+*.egg-info/
+
+# Node
+node_modules/
+.next/
+.turbo/
+pnpm-debug.log
+playwright-report/
+test-results/
+
+# System
+*.log
+
+# Env
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Demo state
+/var/lib/supplai/
+backend/llm/*.sqlite

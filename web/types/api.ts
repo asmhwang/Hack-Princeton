@@ -117,10 +117,16 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Approve Mitigation
-         * @description Stub — full atomic approval is implemented in Task 9.1 (C.7).
+         * Approve Route
+         * @description Atomically approve a mitigation option.
+         *
+         *     Flips all affected shipments to 'rerouting', writes an Approval audit row,
+         *     flips the mitigation status to 'approved', then fires a pg_notify.
+         *
+         *     All DB mutations are inside a single transaction; failure at any step
+         *     leaves zero partial state.
          */
-        post: operations["approve_mitigation_api_mitigations__mitigation_id__approve_post"];
+        post: operations["approve_route_api_mitigations__mitigation_id__approve_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -288,6 +294,35 @@ export interface components {
             exposure: string;
             /** Days To Sla Breach */
             days_to_sla_breach: number | null;
+        };
+        /** ApprovalRecord */
+        ApprovalRecord: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Mitigation Id
+             * Format: uuid
+             */
+            mitigation_id: string;
+            /** Approved By */
+            approved_by: string;
+            /**
+             * Approved At
+             * Format: date-time
+             */
+            approved_at: string;
+            state_snapshot: components["schemas"]["StateSnapshot"];
+        };
+        /** ApprovalResponse */
+        ApprovalResponse: {
+            approval: components["schemas"]["ApprovalRecord"];
+            /** Shipments Flipped */
+            shipments_flipped: number;
+            /** Drafts Saved */
+            drafts_saved: number;
         };
         /** DisruptionRecord */
         DisruptionRecord: {
@@ -561,6 +596,20 @@ export interface components {
             /** Note */
             note: string;
         };
+        /** StateSnapshot */
+        StateSnapshot: {
+            /**
+             * Mitigation Id
+             * Format: uuid
+             */
+            mitigation_id: string;
+            /** Shipment Ids Flipped */
+            shipment_ids_flipped: string[];
+            /** Total Exposure Avoided */
+            total_exposure_avoided: string;
+            /** Drafts Saved */
+            drafts_saved: string[];
+        };
         /** ToolInvocation */
         ToolInvocation: {
             /** Tool Name */
@@ -761,7 +810,7 @@ export interface operations {
             };
         };
     };
-    approve_mitigation_api_mitigations__mitigation_id__approve_post: {
+    approve_route_api_mitigations__mitigation_id__approve_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -778,7 +827,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ApprovalResponse"];
                 };
             };
             /** @description Validation Error */

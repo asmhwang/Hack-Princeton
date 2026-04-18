@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import os
 import subprocess
+from collections.abc import Iterator
 
 import asyncpg
 import pytest
@@ -108,3 +109,15 @@ async def _clean_db_state() -> None:  # type: ignore[return]
         await conn.execute(_TRUNCATE_SQL)
     finally:
         await conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Shared DSN fixture — used by the event-bus tests (EventBus normalises the
+# SQLAlchemy-style prefix internally, so we hand over the same URL form as
+# backend/db/session.py uses).
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def postgresql_url() -> Iterator[str]:
+    yield _TEST_DSN_SQLALCHEMY

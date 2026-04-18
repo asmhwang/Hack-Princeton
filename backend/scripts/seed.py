@@ -40,7 +40,7 @@ async def _seed_ports(s: AsyncSession) -> list[str]:
     return [r["id"] for r in raw]
 
 
-async def _seed_suppliers(s: AsyncSession, rng: random.Random) -> list[str]:
+async def _seed_suppliers(s: AsyncSession, rng: random.Random) -> dict[str, list[str]]:
     specs = [
         # (industry, prefix, count, countries, lats, lngs)
         (
@@ -85,10 +85,11 @@ async def _seed_suppliers(s: AsyncSession, rng: random.Random) -> list[str]:
         ),
     ]
 
-    rows: list[dict] = []
-    supplier_ids: list[str] = []
+    rows: list[dict[str, object]] = []
+    industry_suppliers: dict[str, list[str]] = {}
 
     for industry, prefix, count, countries, lats, lngs in specs:
+        ids: list[str] = []
         for i in range(1, count + 1):
             sid = f"SUP-{prefix}-{i:03d}"
             idx = rng.randrange(len(countries))
@@ -106,11 +107,12 @@ async def _seed_suppliers(s: AsyncSession, rng: random.Random) -> list[str]:
                     "lng": Decimal(str(round(lngs[idx] + rng.uniform(-2.0, 2.0), 4))),
                 }
             )
-            supplier_ids.append(sid)
+            ids.append(sid)
+        industry_suppliers[industry] = ids
 
     stmt = pg_insert(Supplier).values(rows).on_conflict_do_nothing(index_elements=["id"])
     await s.execute(stmt)
-    return supplier_ids
+    return industry_suppliers
 
 
 def _region_for_country(cc: str) -> str:
@@ -140,9 +142,10 @@ def _region_for_country(cc: str) -> str:
     return mapping.get(cc, "Other")
 
 
-async def _seed_skus(s: AsyncSession, rng: random.Random) -> list[str]:
+async def _seed_skus(s: AsyncSession, rng: random.Random) -> dict[str, str]:
     # 8 SKUs per industry × 5 industries = 40
     definitions = [
+        # (sku_id, desc, industry, cost, revenue)
         # electronics (8)
         ("MCU-A", "Microcontroller Unit A", "electronics", 12.50, 18.00),
         ("MCU-B", "Microcontroller Unit B", "electronics", 15.00, 22.00),
@@ -204,7 +207,7 @@ async def _seed_skus(s: AsyncSession, rng: random.Random) -> list[str]:
 
     stmt = pg_insert(Sku).values(rows).on_conflict_do_nothing(index_elements=["id"])
     await s.execute(stmt)
-    return [r["id"] for r in rows]
+    return {sku_id: industry for sku_id, _desc, industry, _cost, _rev in definitions}
 
 
 _CUSTOMER_NAMES = [
@@ -294,64 +297,18 @@ async def _seed_purchase_orders(
     return po_ids
 
 
-def _sku_industry(sku_id: str) -> str:
-    prefixes = {
-        "MCU": "electronics",
-        "PMIC": "electronics",
-        "NAND": "electronics",
-        "DRAM": "electronics",
-        "DISP": "electronics",
-        "CAM": "electronics",
-        "APPAREL": "apparel",
-        "RICE": "food",
-        "WHEAT": "food",
-        "SOYA": "food",
-        "SUGAR": "food",
-        "TUNA": "food",
-        "COFFEE": "food",
-        "CORN": "food",
-        "PALM": "food",
-        "VAX": "pharma",
-        "API": "pharma",
-        "SYRINGE": "pharma",
-        "VIAL": "pharma",
-        "MASK": "pharma",
-        "GLOVES": "pharma",
-        "BEARING": "industrial",
-        "SEAL": "industrial",
-        "BOLT": "industrial",
-        "MOTOR": "industrial",
-        "PUMP": "industrial",
-        "VALVE": "industrial",
-        "FILTER": "industrial",
-    }
-    for prefix, ind in prefixes.items():
-        if sku_id.startswith(prefix):
-            return ind
-    return "electronics"
-
-
 async def _seed_shipments(
     s: AsyncSession,
     rng: random.Random,
     po_ids: list[str],
-    supplier_ids: list[str],
+    industry_suppliers: dict[str, list[str]],
     port_ids: list[str],
-    sku_ids: list[str],
+    sku_industries: dict[str, str],
 ) -> None:
     today = date(2026, 4, 18)
 
-    # Build industry → supplier index for coherent matching
-    industry_suppliers: dict[str, list[str]] = {}
-    # specs order: electronics(15), apparel(10), food(10), pharma(8), industrial(7)
-    industry_order = ["electronics", "apparel", "food", "pharma", "industrial"]
-    counts = [15, 10, 10, 8, 7]
-    idx = 0
-    for ind, cnt in zip(industry_order, counts, strict=True):
-        industry_suppliers[ind] = supplier_ids[idx : idx + cnt]
-        idx += cnt
-
     # PO index → sku_id (round-robin matches seed_purchase_orders)
+    sku_ids = list(sku_industries.keys())
     po_sku = {po_ids[i]: sku_ids[i % len(sku_ids)] for i in range(len(po_ids))}
 
     # Status thresholds: 1-300 → in_transit, 301-400 → planned, 401-500 → arrived
@@ -374,8 +331,8 @@ async def _seed_shipments(
 
         po_id = po_ids[(i - 1) % len(po_ids)]
         sku_id = po_sku[po_id]
-        industry = _sku_industry(sku_id)
-        sup_candidates = industry_suppliers.get(industry, supplier_ids)
+        industry = sku_industries[sku_id]
+        sup_candidates = industry_suppliers[industry]
         supplier_id = rng.choice(sup_candidates)
 
         # Distinct origin / destination ports
@@ -409,11 +366,11 @@ async def seed_all(s: AsyncSession) -> None:
     rng = random.Random(42)
 
     port_ids = await _seed_ports(s)
-    supplier_ids = await _seed_suppliers(s, rng)
-    sku_ids = await _seed_skus(s, rng)
+    industry_suppliers = await _seed_suppliers(s, rng)
+    sku_industries = await _seed_skus(s, rng)
     customer_ids = await _seed_customers(s, rng)
-    po_ids = await _seed_purchase_orders(s, rng, customer_ids, sku_ids)
-    await _seed_shipments(s, rng, po_ids, supplier_ids, port_ids, sku_ids)
+    po_ids = await _seed_purchase_orders(s, rng, customer_ids, list(sku_industries.keys()))
+    await _seed_shipments(s, rng, po_ids, industry_suppliers, port_ids, sku_industries)
 
 
 # ---------------------------------------------------------------------------

@@ -4,6 +4,240 @@
  */
 
 export interface paths {
+    "/api/signals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Signals
+         * @description List signals sorted by first_seen_at DESC with optional cursor pagination.
+         *
+         *     Use ?status=active to return only signals that have been promoted to a disruption.
+         *     Use ?status=pending to return only signals that have not yet been promoted.
+         */
+        get: operations["list_signals_api_signals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/disruptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Disruptions
+         * @description List disruptions sorted by last_seen_at DESC with optional cursor pagination.
+         */
+        get: operations["list_disruptions_api_disruptions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/disruptions/{disruption_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Disruption
+         * @description Get a single disruption by ID.
+         */
+        get: operations["get_disruption_api_disruptions__disruption_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/disruptions/{disruption_id}/impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Disruption Impact
+         * @description Get the most recent impact report for a disruption, including affected shipments.
+         */
+        get: operations["get_disruption_impact_api_disruptions__disruption_id__impact_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/disruptions/{disruption_id}/mitigations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Disruption Mitigations
+         * @description Get mitigation options for the latest impact report of a disruption, including drafts.
+         */
+        get: operations["get_disruption_mitigations_api_disruptions__disruption_id__mitigations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mitigations/{mitigation_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve Mitigation
+         * @description Stub — full atomic approval is implemented in Task 9.1 (C.7).
+         */
+        post: operations["approve_mitigation_api_mitigations__mitigation_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mitigations/{mitigation_id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dismiss Mitigation
+         * @description Flip mitigation status to 'dismissed'.
+         *
+         *     Single-table update; no transaction cascade required at this stage.
+         */
+        post: operations["dismiss_mitigation_api_mitigations__mitigation_id__dismiss_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/analytics/exposure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Exposure
+         * @description Return aggregated exposure bucketed by the requested dimension.
+         *
+         *     Joins: impact_reports ⨝ affected_shipments ⨝ shipments ⨝ purchase_orders [⨝ customers].
+         *
+         *     - quarter:  groups by TO_CHAR(shipments.eta, 'YYYY-"Q"Q'), e.g. "2026-Q2"
+         *     - customer: groups by purchase_orders.customer_id, label is customers.name
+         *     - sku:      groups by purchase_orders.sku_id
+         */
+        get: operations["get_exposure_api_analytics_exposure_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/activity/feed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Activity Feed
+         * @description Return recent agent activity from agent_log, sorted by ts DESC.
+         */
+        get: operations["get_activity_feed_api_activity_feed_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/dev/scenarios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Scenarios
+         * @description Return the 5 canonical demo scenario IDs.
+         */
+        get: operations["list_scenarios_api_dev_scenarios_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/dev/simulate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Simulate
+         * @description Insert a placeholder Signal row and emit pg_notify new_signal.
+         *
+         *     Task 11 will wire the full scenario cascade. This stub gives Plan B a
+         *     testable Simulate button today.
+         */
+        post: operations["simulate_api_dev_simulate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -24,7 +258,336 @@ export interface paths {
 }
 export type webhooks = Record<string, never>;
 export interface components {
-    schemas: never;
+    schemas: {
+        /**
+         * ActivityEntry
+         * @description Single agent log entry for the activity feed.
+         */
+        ActivityEntry: {
+            /** Id */
+            id: number;
+            /** Agent Name */
+            agent_name: string;
+            /** Event Type */
+            event_type: string;
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            };
+            /**
+             * Ts
+             * Format: date-time
+             */
+            ts: string;
+        };
+        /** AffectedShipmentEntry */
+        AffectedShipmentEntry: {
+            /** Shipment Id */
+            shipment_id: string;
+            /** Exposure */
+            exposure: string;
+            /** Days To Sla Breach */
+            days_to_sla_breach: number | null;
+        };
+        /** DisruptionRecord */
+        DisruptionRecord: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /** Summary */
+            summary: string | null;
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "weather" | "policy" | "news" | "logistics" | "macro" | "industrial";
+            /** Severity */
+            severity: number;
+            /** Region */
+            region: string | null;
+            /** Lat */
+            lat: number | null;
+            /** Lng */
+            lng: number | null;
+            /** Radius Km */
+            radius_km: string | null;
+            /** Source Signal Ids */
+            source_signal_ids: string[];
+            /** Confidence */
+            confidence: string;
+            /**
+             * First Seen At
+             * Format: date-time
+             */
+            first_seen_at: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "resolved";
+        };
+        /** DraftCommunicationRecord */
+        DraftCommunicationRecord: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Mitigation Id
+             * Format: uuid
+             */
+            mitigation_id: string;
+            /**
+             * Recipient Type
+             * @enum {string}
+             */
+            recipient_type: "supplier" | "customer" | "internal";
+            /** Recipient Contact */
+            recipient_contact: string;
+            /** Subject */
+            subject: string;
+            /** Body */
+            body: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Sent At */
+            sent_at: string | null;
+        };
+        /**
+         * ExposureBucket
+         * @description One aggregated bucket for the exposure analytics endpoint.
+         *
+         *     Fields:
+         *         label   — human-readable dimension value (quarter string like "2026-Q2",
+         *                   customer name, or SKU id)
+         *         exposure — total dollar exposure across affected shipments in this bucket
+         *         units   — total units_at_risk across impact reports in this bucket
+         *         pos     — distinct purchase order count linked to affected shipments in
+         *                   this bucket (proxy for order-level risk breadth)
+         */
+        ExposureBucket: {
+            /** Label */
+            label: string;
+            /** Exposure */
+            exposure: string;
+            /** Units */
+            units: number;
+            /** Pos */
+            pos: number;
+        };
+        /** HTTPValidationError */
+        HTTPValidationError: {
+            /** Detail */
+            detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * ImpactReportWithShipments
+         * @description ImpactReportRecord extended with its affected shipments list.
+         */
+        ImpactReportWithShipments: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Disruption Id
+             * Format: uuid
+             */
+            disruption_id: string;
+            /** Total Exposure */
+            total_exposure: string;
+            /** Units At Risk */
+            units_at_risk: number;
+            /** Cascade Depth */
+            cascade_depth: number;
+            /** Sql Executed */
+            sql_executed: string | null;
+            reasoning_trace: components["schemas"]["ReasoningTrace"];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Affected Shipments */
+            affected_shipments: components["schemas"]["AffectedShipmentEntry"][];
+        };
+        /** MitigationOptionRecord */
+        MitigationOptionRecord: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Impact Report Id
+             * Format: uuid
+             */
+            impact_report_id: string;
+            /**
+             * Option Type
+             * @enum {string}
+             */
+            option_type: "reroute" | "alternate_supplier" | "expedite" | "accept_delay" | "switch_compliant_supplier";
+            /** Description */
+            description: string;
+            /** Delta Cost */
+            delta_cost: string;
+            /** Delta Days */
+            delta_days: number;
+            /** Confidence */
+            confidence: number;
+            /** Rationale */
+            rationale: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "approved" | "dismissed";
+        };
+        /**
+         * MitigationWithDrafts
+         * @description MitigationOptionRecord extended with its draft communications.
+         */
+        MitigationWithDrafts: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Impact Report Id
+             * Format: uuid
+             */
+            impact_report_id: string;
+            /**
+             * Option Type
+             * @enum {string}
+             */
+            option_type: "reroute" | "alternate_supplier" | "expedite" | "accept_delay" | "switch_compliant_supplier";
+            /** Description */
+            description: string;
+            /** Delta Cost */
+            delta_cost: string;
+            /** Delta Days */
+            delta_days: number;
+            /** Confidence */
+            confidence: number;
+            /** Rationale */
+            rationale: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "approved" | "dismissed";
+            /** Drafts */
+            drafts: components["schemas"]["DraftCommunicationRecord"][];
+        };
+        /** ReasoningTrace */
+        ReasoningTrace: {
+            /** Tool Calls */
+            tool_calls: components["schemas"]["ToolInvocation"][];
+            /** Final Reasoning */
+            final_reasoning: string;
+        };
+        /** SignalRecord */
+        SignalRecord: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Source Category
+             * @enum {string}
+             */
+            source_category: "news" | "weather" | "policy" | "logistics" | "macro";
+            /** Source Name */
+            source_name: string;
+            /** Title */
+            title: string;
+            /** Summary */
+            summary: string | null;
+            /** Region */
+            region: string | null;
+            /** Lat */
+            lat: number | null;
+            /** Lng */
+            lng: number | null;
+            /** Radius Km */
+            radius_km: string | null;
+            /** Source Urls */
+            source_urls: string[];
+            /** Confidence */
+            confidence: string;
+            /**
+             * First Seen At
+             * Format: date-time
+             */
+            first_seen_at: string;
+            /** Promoted To Disruption Id */
+            promoted_to_disruption_id: string | null;
+        };
+        /** SimulateRequest */
+        SimulateRequest: {
+            /**
+             * Scenario
+             * @enum {string}
+             */
+            scenario: "typhoon_kaia" | "busan_strike" | "cbam_tariff" | "luxshare_fire" | "redsea_advisory";
+        };
+        /** SimulateResponse */
+        SimulateResponse: {
+            /**
+             * Signal Id
+             * Format: uuid
+             */
+            signal_id: string;
+            /** Scenario */
+            scenario: string;
+            /** Note */
+            note: string;
+        };
+        /** ToolInvocation */
+        ToolInvocation: {
+            /** Tool Name */
+            tool_name: string;
+            /** Args */
+            args: {
+                [key: string]: unknown;
+            };
+            /** Row Count */
+            row_count: number;
+            /** Synthesized Sql */
+            synthesized_sql: string;
+        };
+        /** ValidationError */
+        ValidationError: {
+            /** Location */
+            loc: (string | number)[];
+            /** Message */
+            msg: string;
+            /** Error Type */
+            type: string;
+            /** Input */
+            input?: unknown;
+            /** Context */
+            ctx?: Record<string, never>;
+        };
+    };
     responses: never;
     parameters: never;
     requestBodies: never;
@@ -33,6 +596,350 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_signals_api_signals_get: {
+        parameters: {
+            query?: {
+                /** @description Filter by promotion status: 'active' (promoted) or 'pending' (not yet promoted) */
+                status?: string | null;
+                /** @description Cursor: return rows with first_seen_at < this ISO timestamp */
+                before?: string | null;
+                /** @description Max rows to return (1-200) */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignalRecord"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_disruptions_api_disruptions_get: {
+        parameters: {
+            query?: {
+                /** @description Filter by status: 'active' or 'resolved' */
+                status?: string | null;
+                /** @description Cursor: return rows with last_seen_at < this ISO timestamp */
+                before?: string | null;
+                /** @description Max rows to return (1-200) */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DisruptionRecord"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_disruption_api_disruptions__disruption_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                disruption_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DisruptionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_disruption_impact_api_disruptions__disruption_id__impact_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                disruption_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImpactReportWithShipments"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_disruption_mitigations_api_disruptions__disruption_id__mitigations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                disruption_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MitigationWithDrafts"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_mitigation_api_mitigations__mitigation_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mitigation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dismiss_mitigation_api_mitigations__mitigation_id__dismiss_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mitigation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MitigationOptionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_exposure_api_analytics_exposure_get: {
+        parameters: {
+            query: {
+                /** @description Dimension to group by: quarter, customer, or sku */
+                group_by: "quarter" | "customer" | "sku";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExposureBucket"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_activity_feed_api_activity_feed_get: {
+        parameters: {
+            query?: {
+                /** @description Max entries to return (1-200) */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityEntry"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_scenarios_api_dev_scenarios_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+        };
+    };
+    simulate_api_dev_simulate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SimulateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimulateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     health_health_get: {
         parameters: {
             query?: never;

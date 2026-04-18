@@ -61,6 +61,29 @@ html, body {
   font-feature-settings: 'tnum' 1;
 }
 
+/* Pulse-along-line animation used by /stack diagram.
+ * Works with pathLength="100" on SVG paths — the stroke-dasharray "6 94"
+ * gives one 6-unit bright dash with a 94-unit gap (total 100 = full path),
+ * so a single pulse travels the full line per cycle, then loops.
+ * The inverse keyframe runs the pulse in the opposite direction for
+ * bidirectional flows. */
+@keyframes stack-pulse-up {
+  from { stroke-dashoffset: 0; }
+  to   { stroke-dashoffset: -100; }
+}
+@keyframes stack-pulse-down {
+  from { stroke-dashoffset: 0; }
+  to   { stroke-dashoffset: 100; }
+}
+.stack-pulse {
+  stroke-dasharray: 6 94;
+  animation: stack-pulse-up 2.4s linear infinite;
+}
+.stack-pulse-down {
+  stroke-dasharray: 6 94;
+  animation: stack-pulse-down 2.4s linear infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.001ms !important;

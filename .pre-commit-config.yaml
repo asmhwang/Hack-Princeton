@@ -1,0 +1,42 @@
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format
+        language: system
+        types_or: [python, pyi]
+      - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check --fix
+        language: system
+        types_or: [python, pyi]
+      - id: mypy-shared
+        name: mypy (shared modules)
+        entry: uv run mypy --strict backend/db backend/schemas backend/llm backend/agents/base.py
+        language: system
+        pass_filenames: false
+        types: [python]
+      - id: gitleaks
+        name: gitleaks
+        entry: gitleaks protect --staged --config .gitleaks.toml
+        language: system
+        pass_filenames: false
+      - id: pnpm-lint
+        name: pnpm lint
+        entry: bash -c 'cd web && pnpm lint'
+        language: system
+        pass_filenames: false
+        files: ^web/
+      - id: pnpm-typecheck
+        name: pnpm typecheck
+        entry: bash -c 'cd web && pnpm typecheck'
+        language: system
+        pass_filenames: false
+        files: ^web/
+      - id: openapi-types-fresh
+        name: openapi-typescript in sync
+        entry: bash -c 'cd web && pnpm run openapi:check'
+        language: system
+        pass_filenames: false
+        files: ^(backend/api|web/types/api.ts)

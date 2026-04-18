@@ -60,7 +60,7 @@ def _gemini_schema(schema: type[BaseModel]) -> dict[str, Any]:
     ``$defs``, ``anyOf`` (for nullable). Strip them recursively.
     """
     raw = schema.model_json_schema()
-    return _sanitize_schema(raw, defs=raw.get("$defs", {}))
+    return cast(dict[str, Any], _sanitize_schema(raw, defs=raw.get("$defs", {})))
 
 
 _DROP_KEYS = frozenset(

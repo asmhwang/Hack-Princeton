@@ -16,9 +16,10 @@ import logging
 import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Any, cast
 
 import asyncpg
-from sqlalchemy import select, update
+from sqlalchemy import CursorResult, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.models import (
@@ -88,10 +89,13 @@ async def _flip_shipments(s: AsyncSession, shipment_ids: list[str]) -> int:
     """Flip status of the given shipments to 'rerouting'. Returns count flipped."""
     if not shipment_ids:
         return 0
-    result = await s.execute(
-        update(Shipment).where(Shipment.id.in_(shipment_ids)).values(status="rerouting")
+    result = cast(
+        "CursorResult[Any]",
+        await s.execute(
+            update(Shipment).where(Shipment.id.in_(shipment_ids)).values(status="rerouting")
+        ),
     )
-    return result.rowcount  # type: ignore[return-value]
+    return result.rowcount
 
 
 async def _write_audit(
@@ -192,7 +196,7 @@ async def approve_mitigation(
         approval = await _write_audit(s, mitigation_id, approved_by, state_snapshot)
         # Flip mitigation status inside the same transaction
         await s.execute(
-            MitigationOption.__table__.update()
+            update(MitigationOption)
             .where(MitigationOption.id == mitigation_id)
             .values(status="approved")
         )

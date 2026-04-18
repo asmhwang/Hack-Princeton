@@ -348,17 +348,18 @@ async def test_simulate_valid_scenario_inserts_signal():
     assert r.status_code == 200
     body = r.json()
     assert "signal_id" in body
+    assert "disruption_id" in body
     assert body["scenario"] == "typhoon_kaia"
-    assert "Task 11" in body["note"]
+    assert "expected" in body
 
-    # Verify DB has the row
+    # Verify signal row in DB with scenario source_name
     sig_id = uuid.UUID(body["signal_id"])
     async with session() as s:
         row = await s.execute(
             text("SELECT source_name FROM signals WHERE id = :id"),
             {"id": sig_id},
         )
-        assert row.scalar_one() == "simulate:typhoon_kaia"
+        assert row.scalar_one() == "tavily:news:scmp"
 
 
 async def test_simulate_invalid_scenario_returns_422():

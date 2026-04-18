@@ -1,27 +1,34 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg: #0A0B0D;
-  --color-surface: #111316;
-  --color-surface-raised: #181B1F;
-  --color-border: #23262B;
-  --color-border-strong: #2E3238;
-  --color-text: #E8EAED;
-  --color-text-muted: #8B9098;
-  --color-text-subtle: #5A6068;
+  --color-bg: #0f0f0f;
+  --color-surface: #171717;
+  --color-surface-raised: #202020;
+  --color-border: #2a2a2a;
+  --color-border-strong: #3a3a3a;
+  --color-text: #f1f1f1;
+  --color-text-muted: #a3a3a3;
+  --color-text-subtle: #737373;
 
   --color-critical: #E5484D;
   --color-critical-bg: #1F1315;
   --color-warn: #D97757;
   --color-warn-bg: #1F1612;
   --color-ok: #46A758;
-  --color-info: #4A8FD4;
+  --color-info: #c2a46d;
 
-  --color-cat-weather: #5E81AC;
-  --color-cat-policy: #B48EAD;
-  --color-cat-news: #A3BE8C;
-  --color-cat-logistics: #EBCB8B;
-  --color-cat-macro: #D08770;
+  --color-cat-weather: #9ca3af;
+  --color-cat-weather-bg: rgba(156, 163, 175, 0.1);
+  --color-cat-policy: #b8a38f;
+  --color-cat-policy-bg: rgba(184, 163, 143, 0.1);
+  --color-cat-news: #8fae82;
+  --color-cat-news-bg: rgba(143, 174, 130, 0.1);
+  --color-cat-logistics: #c2a46d;
+  --color-cat-logistics-bg: rgba(194, 164, 109, 0.1);
+  --color-cat-macro: #bd8d6b;
+  --color-cat-macro-bg: rgba(189, 141, 107, 0.1);
+  --color-cat-industrial: #a98f7a;
+  --color-cat-industrial-bg: rgba(169, 143, 122, 0.1);
 
   --font-sans: var(--font-inter), system-ui, sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
@@ -55,10 +62,89 @@ html, body {
   color: var(--color-text);
   font-family: var(--font-sans);
   font-size: var(--text-base);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .tnum {
-  font-feature-settings: 'tnum' 1;
+  font-feature-settings: 'tnum' 1, 'cv11' 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: #2a2a2a;
+  border-radius: 10px;
+  border: 2px solid var(--color-bg);
+}
+::-webkit-scrollbar-thumb:hover { background: #3a3a3a; }
+
+/* Shimmer skeleton */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--color-surface) 0%,
+    var(--color-surface-raised) 50%,
+    var(--color-surface) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+}
+
+/* WS status pulse */
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(70, 167, 88, 0.5); }
+  50% { box-shadow: 0 0 0 4px rgba(70, 167, 88, 0); }
+}
+.pulse-ok { animation: pulse-dot 2s ease-in-out infinite; }
+
+/* Map arc animations */
+@keyframes arc-dash {
+  to { stroke-dashoffset: -60; }
+}
+.arc-animated {
+  stroke-dasharray: 4 6;
+  animation: arc-dash 3s linear infinite;
+}
+
+@keyframes pulse-marker {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.4); }
+}
+.marker-pulse {
+  animation: pulse-marker 2s ease-in-out infinite;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+/* Line clamp */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Shipments table row hover */
+.ship-row { transition: background 0.12s ease-out; }
+.ship-row:hover { background: var(--color-surface) !important; }
+
+/* Selection */
+::selection {
+  background: rgba(194, 164, 109, 0.3);
+  color: var(--color-text);
+}
+
+/* Focus */
+button:focus-visible, a:focus-visible {
+  outline: 2px solid var(--color-info);
+  outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {

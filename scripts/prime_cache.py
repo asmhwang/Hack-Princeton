@@ -39,34 +39,23 @@ import shutil
 import sys
 import uuid
 from dataclasses import dataclass
-from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 import structlog
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from backend.agents.analyst.processors.impact import build_impact_report
 from backend.agents.scout.processors.classify import classify_raw_signal
 from backend.agents.strategist.processors.drafts import generate_drafts
 from backend.agents.strategist.processors.options import generate_options
 from backend.db.bus import EventBus
-from backend.db.models import (
-    Customer,
-    Disruption,
-    Port,
-    PurchaseOrder,
-    Shipment,
-    Signal,
-    Sku,
-    Supplier,
-)
+from backend.db.models import Disruption, Signal
 from backend.db.session import DBSettings, session
 from backend.llm.client import LLMClient, LLMValidationError
 from backend.scripts.scenarios import SCENARIOS
 from backend.scripts.scenarios._types import Scenario
-from backend.tests.fixtures.typhoon import seed_typhoon
+from backend.scripts.scenarios.prime_chain import seed_prime_chain
 
 log = structlog.get_logger()
 
@@ -110,121 +99,22 @@ def _scenario_raw_hit(scenario: Scenario) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-async def _seed_minimal_chain(s: Any, scenario: Scenario) -> None:
-    """Seed minimal port+supplier+sku+customer+PO+shipments near the disruption.
-
-    Ensures the Analyst tool loop finds real shipment IDs so ``affected_shipments``
-    FK persist succeeds. Idempotent via ON CONFLICT DO NOTHING.
-    """
-    sid = scenario.id
-    port_id = f"PORT-PRIME-{sid[:6].upper()}"
-    supplier_id = f"SUP-PRIME-{sid[:6].upper()}"
-    sku_id = f"SKU-PRIME-{sid[:6].upper()}"
-    customer_id = f"CUST-PRIME-{sid[:6].upper()}"
-    po_ids = [f"PO-PRIME-{sid[:4].upper()}-{i}" for i in range(1, 4)]
-    shipment_ids = [f"SHP-PRIME-{sid[:4].upper()}-{i}" for i in range(1, 4)]
-    today = date(2026, 4, 18)
-
-    await s.execute(
-        pg_insert(Port)
-        .values(
-            id=port_id,
-            name=f"Prime-{sid}",
-            country="XX",
-            lat=Decimal(str(scenario.disruption.lat)),
-            lng=Decimal(str(scenario.disruption.lng)),
-            modes=["sea"],
-        )
-        .on_conflict_do_nothing()
-    )
-    await s.execute(
-        pg_insert(Supplier)
-        .values(
-            id=supplier_id,
-            name=f"Prime Supplier {sid}",
-            country="XX",
-            region=scenario.disruption.region,
-            tier=1,
-            industry="electronics",
-            reliability_score=Decimal("0.9"),
-            categories=["electronics"],
-            lat=Decimal(str(scenario.disruption.lat)),
-            lng=Decimal(str(scenario.disruption.lng)),
-        )
-        .on_conflict_do_nothing()
-    )
-    await s.execute(
-        pg_insert(Sku)
-        .values(
-            id=sku_id,
-            description=f"Prime SKU {sid}",
-            family="electronics",
-            industry="electronics",
-            unit_cost=Decimal("10"),
-            unit_revenue=Decimal("25"),
-        )
-        .on_conflict_do_nothing()
-    )
-    await s.execute(
-        pg_insert(Customer)
-        .values(
-            id=customer_id,
-            name=f"Prime Customer {sid}",
-            tier="strategic",
-            sla_days=14,
-            contact_email=f"{sid}@example.com",
-        )
-        .on_conflict_do_nothing()
-    )
-    for i, po_id in enumerate(po_ids):
-        await s.execute(
-            pg_insert(PurchaseOrder)
-            .values(
-                id=po_id,
-                customer_id=customer_id,
-                sku_id=sku_id,
-                qty=1000 * (i + 1),
-                due_date=today + timedelta(days=14 + i * 7),
-                revenue=Decimal(str(150000 * (i + 1))),
-                sla_breach_penalty=Decimal("10000"),
-            )
-            .on_conflict_do_nothing()
-        )
-    for i, ship_id in enumerate(shipment_ids):
-        await s.execute(
-            pg_insert(Shipment)
-            .values(
-                id=ship_id,
-                po_id=po_ids[i],
-                supplier_id=supplier_id,
-                origin_port_id=port_id,
-                dest_port_id=port_id,
-                status="in_transit",
-                mode="sea",
-                eta=today + timedelta(days=14 + i * 7),
-                value=Decimal(str(150000 * (i + 1))),
-            )
-            .on_conflict_do_nothing()
-        )
-
-
 async def _seed_scenario_rows(scenario: Scenario) -> uuid.UUID:
-    """Insert the scenario's signal + disruption. Returns disruption_id.
+    """Insert the scenario's prime-chain + signal + disruption. Returns disruption_id.
 
-    For the typhoon scenario we call ``seed_typhoon`` (self-contained ground-truth).
-    All other scenarios get ``_seed_minimal_chain`` so tool-loop queries surface
-    real shipment IDs instead of the model fabricating them.
+    All 5 scenarios go through the same path: the shared ``seed_prime_chain``
+    (scenarios/prime_chain.py) guarantees FK-valid shipments near the
+    disruption centroid, then the scenario's Signal/Disruption rows get
+    inserted with fresh UUIDs. Content-stable cache keys hash the disruption's
+    (category, centroid, radius, title), so keys derived here match keys derived
+    by ``/api/dev/simulate`` at demo time — that call also invokes
+    ``seed_prime_chain`` first, keeping prime-chain rows present for cache replay.
     """
     sig = scenario.signal
     dis = scenario.disruption
 
     async with session() as s:
-        if scenario.id == "typhoon_kaia":
-            typhoon = await seed_typhoon(s)
-            await s.commit()
-            return typhoon.disruption_id
-
-        await _seed_minimal_chain(s, scenario)
+        await seed_prime_chain(s, scenario)
 
         signal_id = uuid.uuid4()
         disruption_id = uuid.uuid4()
@@ -400,10 +290,10 @@ async def _run(scenarios: list[str], freeze: bool) -> int:
             if idx > 0 and inter_scenario_delay > 0:
                 log.info("prime_cache.pacing", sleep_s=inter_scenario_delay)
                 await asyncio.sleep(inter_scenario_delay)
-            scenario = SCENARIOS[sid]  # type: ignore[assignment]
+            scenario = SCENARIOS[sid]
             log.info("prime_cache.scenario.start", scenario=sid)
             try:
-                res = await _prime_scenario(scenario, llm, bus)  # type: ignore[arg-type]
+                res = await _prime_scenario(scenario, llm, bus)
             except Exception as err:  # noqa: BLE001
                 res = _PrimeResult(
                     scenario=sid,

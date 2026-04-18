@@ -288,3 +288,69 @@ async def test_typhoon_offline_pipeline(
     assert drafts.supplier.subject
 
     assert any(c == "new_impact" for c, _ in bus.published)
+
+
+# ---------------------------------------------------------------------------
+# Cache-key alignment — the primed cache keys must match what demo-time
+# /api/dev/simulate produces. If a scenario's disruption content changes but
+# the cache is not re-primed, cache replay silently misses → all 5 scenarios
+# degrade to the Analyst fallback path. This test is a static guard.
+# ---------------------------------------------------------------------------
+
+
+_CACHE_SEED = Path(__file__).resolve().parents[2] / "backend" / "llm" / "prompt_cache.sqlite.seed"
+
+
+def _expected_analyst_key(scenario_id: str) -> str:
+    from backend.scripts.scenarios import SCENARIOS
+
+    d = SCENARIOS[scenario_id].disruption
+    parts = (
+        (d.category or "").strip().lower(),
+        f"{float(d.lat or 0):.4f}",
+        f"{float(d.lng or 0):.4f}",
+        f"{float(d.radius_km or 0):.1f}",
+        (d.title or "").strip().lower(),
+    )
+    digest = hashlib.sha256("|".join(parts).encode()).hexdigest()
+    return f"analyst::content::{digest}"
+
+
+_REPRIME_NEEDED = {"typhoon_kaia"}
+
+
+@pytest.mark.skipif(
+    not _CACHE_SEED.exists(), reason="primed cache seed file not present in this checkout"
+)
+@pytest.mark.parametrize(
+    "scenario_id",
+    [
+        pytest.param(
+            "typhoon_kaia",
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason="typhoon cache was primed against the seed_typhoon fixture "
+                "(Haikui, 22.5/114.1/400km); scenario is Kaia (22.54/114.06/500km). "
+                "Re-run scripts/prime_cache.py --scenario typhoon_kaia to refresh.",
+            ),
+        ),
+        "busan_strike",
+        "cbam_tariff",
+        "luxshare_fire",
+        "redsea_advisory",
+    ],
+)
+def test_primed_analyst_key_matches_scenario(scenario_id: str) -> None:
+    import sqlite3
+
+    conn = sqlite3.connect(_CACHE_SEED)
+    try:
+        (count,) = conn.execute(
+            "SELECT COUNT(*) FROM cache WHERE key = ?", (_expected_analyst_key(scenario_id),)
+        ).fetchone()
+    finally:
+        conn.close()
+    assert count == 1, (
+        f"primed Analyst cache missing or stale for {scenario_id}; re-run "
+        f"scripts/prime_cache.py to regenerate prompt_cache.sqlite.seed"
+    )

@@ -66,9 +66,7 @@ def _mk_option(idx: int, kind: str) -> MitigationOption:
         delta_cost=Decimal("10000.00") * idx,
         delta_days=idx,
         confidence=0.7,
-        rationale=(
-            f"Rationale {idx} cites tool calls and concrete rows to justify the option."
-        ),
+        rationale=(f"Rationale {idx} cites tool calls and concrete rows to justify the option."),
     )
 
 
@@ -144,9 +142,7 @@ async def test_save_mitigation_options_writes_rows_and_log(
         log_rows = (
             (
                 await s.execute(
-                    select(AgentLog).where(
-                        AgentLog.event_type == "openclaw.SaveMitigationOptions"
-                    )
+                    select(AgentLog).where(AgentLog.event_type == "openclaw.SaveMitigationOptions")
                 )
             )
             .scalars()
@@ -247,23 +243,14 @@ async def test_flip_shipment_statuses_updates_and_logs(
 
     async with session() as s:
         rows = (
-            (
-                await s.execute(
-                    select(Shipment.id, Shipment.status).where(
-                        Shipment.id.in_(target_ids)
-                    )
-                )
-            )
-            .all()
-        )
+            await s.execute(select(Shipment.id, Shipment.status).where(Shipment.id.in_(target_ids)))
+        ).all()
         assert {r.status for r in rows} == {"rerouting"}
 
         log_rows = (
             (
                 await s.execute(
-                    select(AgentLog).where(
-                        AgentLog.event_type == "openclaw.FlipShipmentStatuses"
-                    )
+                    select(AgentLog).where(AgentLog.event_type == "openclaw.FlipShipmentStatuses")
                 )
             )
             .scalars()
@@ -306,9 +293,7 @@ async def test_write_approval_audit_persists_snapshot_and_logs(
         await s.commit()
 
     async with session() as s:
-        row = (
-            await s.execute(select(Approval).where(Approval.id == approval_id))
-        ).scalar_one()
+        row = (await s.execute(select(Approval).where(Approval.id == approval_id))).scalar_one()
         assert row.mitigation_id == mitigation_id
         assert row.approved_by == "operator@suppl.ai"
         assert row.state_snapshot["delta_usd"] == "42000"
@@ -316,9 +301,7 @@ async def test_write_approval_audit_persists_snapshot_and_logs(
         log_rows = (
             (
                 await s.execute(
-                    select(AgentLog).where(
-                        AgentLog.event_type == "openclaw.WriteApprovalAudit"
-                    )
+                    select(AgentLog).where(AgentLog.event_type == "openclaw.WriteApprovalAudit")
                 )
             )
             .scalars()

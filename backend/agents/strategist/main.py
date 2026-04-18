@@ -109,9 +109,7 @@ class StrategistAgent(AgentBase):
             log.warning("strategist.impact_missing", impact_id=str(impact_id))
             return
         except LLMValidationError as err:
-            log.warning(
-                "strategist.options_llm_failed", impact_id=str(impact_id), error=str(err)
-            )
+            log.warning("strategist.options_llm_failed", impact_id=str(impact_id), error=str(err))
             return
 
         context = await _load_mitigation_context(impact_id)

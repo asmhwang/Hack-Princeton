@@ -131,9 +131,7 @@ class SaveMitigationOptionsArgs(BaseModel):
     options: list[MitigationOptionSchema] = Field(min_length=1, max_length=4)
 
 
-class SaveMitigationOptions(
-    OpenClawAction[SaveMitigationOptionsArgs, list[uuid.UUID]]
-):
+class SaveMitigationOptions(OpenClawAction[SaveMitigationOptionsArgs, list[uuid.UUID]]):
     name: ClassVar[str] = "SaveMitigationOptions"
 
     async def _run(
@@ -172,9 +170,7 @@ class SaveDraftCommunicationsArgs(BaseModel):
     bundle: DraftCommunicationBundle
 
 
-class SaveDraftCommunications(
-    OpenClawAction[SaveDraftCommunicationsArgs, list[uuid.UUID]]
-):
+class SaveDraftCommunications(OpenClawAction[SaveDraftCommunicationsArgs, list[uuid.UUID]]):
     name: ClassVar[str] = "SaveDraftCommunications"
 
     async def _run(
@@ -227,9 +223,7 @@ class FlipShipmentStatuses(OpenClawAction[FlipShipmentStatusesArgs, int]):
         result = cast(
             CursorResult[Any],
             await session.execute(
-                update(Shipment)
-                .where(Shipment.id.in_(args.shipment_ids))
-                .values(status=args.to)
+                update(Shipment).where(Shipment.id.in_(args.shipment_ids)).values(status=args.to)
             ),
         )
         return int(result.rowcount or 0)

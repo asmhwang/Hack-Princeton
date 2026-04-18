@@ -109,9 +109,7 @@ def _validate_bundle(bundle: DraftCommunicationBundle) -> None:
     internal_body = bundle.internal.body.lower()
     for banned in _INTERNAL_FORBIDDEN:
         if banned in internal_body:
-            raise DraftQualityError(
-                f"internal draft contains forbidden phrase: {banned!r}"
-            )
+            raise DraftQualityError(f"internal draft contains forbidden phrase: {banned!r}")
 
     if bundle.supplier.recipient_type != "supplier":
         raise DraftQualityError("supplier draft has wrong recipient_type")

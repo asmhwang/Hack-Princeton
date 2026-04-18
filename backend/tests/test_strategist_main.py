@@ -285,9 +285,7 @@ async def test_strategist_processes_new_impact_end_to_end(
             (
                 await s.execute(
                     select(DraftCommunicationRow).where(
-                        DraftCommunicationRow.mitigation_id.in_(
-                            [o.id for o in options]
-                        )
+                        DraftCommunicationRow.mitigation_id.in_([o.id for o in options])
                     )
                 )
             )

@@ -53,9 +53,7 @@ async def record_processed(
     await agent.checkpoint(_KEY_LAST_IMPACT, str(impact_id))
     await agent.checkpoint(_KEY_PROCESSED_COUNT, processed_count(agent) + 1)
     if draft_failures:
-        await agent.checkpoint(
-            _KEY_DRAFT_FAILURES, draft_failure_count(agent) + draft_failures
-        )
+        await agent.checkpoint(_KEY_DRAFT_FAILURES, draft_failure_count(agent) + draft_failures)
 
 
 def state_snapshot(agent: AgentBase) -> dict[str, Any]:

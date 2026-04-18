@@ -19,6 +19,7 @@ No DB I/O; the caller owns persistence via the OpenClaw action layer.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Protocol, cast
@@ -151,7 +152,10 @@ async def generate_drafts(
     result = await llm.structured(
         prompt,
         DraftCommunicationBundle,
-        cache_key=f"strategist.drafts::{option.option_type}::{hash(option.description)}",
+        cache_key=(
+            f"strategist.drafts::{option.option_type}::"
+            f"{hashlib.sha256((option.description or '').encode()).hexdigest()[:16]}"
+        ),
     )
     bundle = cast(DraftCommunicationBundle, result)
     _validate_bundle(bundle)

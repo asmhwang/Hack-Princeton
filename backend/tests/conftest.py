@@ -55,7 +55,9 @@ _TRUNCATE_SQL = (
 # ---------------------------------------------------------------------------
 
 
-_PG_AVAILABLE: bool = False
+# Mutable container avoids a `global` statement (ruff PLW0603) while still
+# letting fixtures share a session-wide flag.
+_pg: dict[str, bool] = {"available": False}
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -66,7 +68,6 @@ def _ensure_test_db() -> None:
     silently skip DB setup. DB-dependent tests will still fail loudly when they
     try to open a session; tests that do not touch the DB run unaffected.
     """
-    global _PG_AVAILABLE
 
     async def _create_db_if_missing() -> bool:
         try:
@@ -84,8 +85,8 @@ def _ensure_test_db() -> None:
             await conn.close()
         return True
 
-    _PG_AVAILABLE = asyncio.run(_create_db_if_missing())
-    if not _PG_AVAILABLE:
+    _pg["available"] = asyncio.run(_create_db_if_missing())
+    if not _pg["available"]:
         return
 
     # Run alembic upgrade head against the test DB.
@@ -118,7 +119,7 @@ async def _clean_db_state() -> None:  # type: ignore[return]
     engine.cache_clear()
     _sessionmaker.cache_clear()
 
-    if not _PG_AVAILABLE:
+    if not _pg["available"]:
         return
 
     # Truncate via raw asyncpg — no pool, no loop binding issues.

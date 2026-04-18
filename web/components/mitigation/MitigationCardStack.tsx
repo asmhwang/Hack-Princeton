@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion, AnimatePresence, LayoutGroup } from "motion/react";
 import type { ImpactReport, MitigationOption } from "@/types/schemas";
 import { useApprove } from "@/hooks/useApprove";
+import { useWarRoomStore } from "@/lib/store";
 import { ApprovalModal } from "@/components/mitigation/ApprovalModal";
 import { ExplainabilityDrawer } from "@/components/mitigation/ExplainabilityDrawer";
 import { MitigationCard } from "@/components/mitigation/MitigationCard";
@@ -18,6 +19,7 @@ type MitigationCardStackProps = Readonly<{
 
 export function MitigationCardStack({ disruptionId, impact, options }: MitigationCardStackProps) {
   const approve = useApprove(disruptionId);
+  const pushActivity = useWarRoomStore((s) => s.pushActivity);
   const [approvalOption, setApprovalOption] = useState<MitigationOption | null>(null);
   const [explainOption, setExplainOption] = useState<MitigationOption | null>(null);
   const [approvedIds, setApprovedIds] = useState<Set<string>>(new Set());
@@ -73,9 +75,17 @@ export function MitigationCardStack({ disruptionId, impact, options }: Mitigatio
         onClose={() => setApprovalOption(null)}
         onConfirm={() => {
           if (approvalOption) {
-            approve.mutate(approvalOption.id, {
+            const pendingOption = approvalOption;
+            approve.mutate(pendingOption.id, {
               onSuccess: () => {
-                setApprovedIds((prev) => new Set([...prev, approvalOption.id]));
+                setApprovedIds((prev) => new Set([...prev, pendingOption.id]));
+                pushActivity({
+                  id: `approval-morph-${pendingOption.id}`,
+                  agent: "System",
+                  message: `Approved ${pendingOption.title ?? pendingOption.option_type.replaceAll("_", " ")}`,
+                  severity: "success",
+                  created_at: new Date().toISOString(),
+                });
                 setApprovalOption(null);
               },
             });

@@ -179,8 +179,10 @@ export function ApprovalModal({ option, open, pending, onClose, onConfirm }: App
               >
                 Cancel
               </button>
-              <button
+              <motion.button
                 type="button"
+                layoutId={`act-approval-morph-${option.id}`}
+                transition={spring}
                 onClick={onConfirm}
                 disabled={pending}
                 style={{
@@ -194,7 +196,7 @@ export function ApprovalModal({ option, open, pending, onClose, onConfirm }: App
                 }}
               >
                 {pending ? "Approving…" : "Approve & prepare"}
-              </button>
+              </motion.button>
             </div>
           </motion.div>
         </motion.div>

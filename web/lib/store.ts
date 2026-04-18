@@ -58,7 +58,7 @@ function activityFromEvent(event: WsEvent): ActivityItem {
       };
     case "new_approval":
       return {
-        id: `activity-${event.channel}-${event.payload.id}`,
+        id: `approval-morph-${event.payload.mitigation_id}`,
         agent: "System",
         message: `Approved mitigation ${event.payload.mitigation_id.slice(0, 8)}`,
         created_at: timestamp,

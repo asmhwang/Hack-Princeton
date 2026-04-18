@@ -217,9 +217,12 @@ const MODE_COLORS: Record<RouteMode, string> = {
 
 export function arcColorForRoute(route: GlobeRoute): [string, string] {
   const base = MODE_COLORS[route.mode];
-  if (route.status === "blocked") return [`${base}0.04)`, "rgba(229,72,77,0.95)"];
-  if (route.status === "watch") return [`${base}0.04)`, `${base}0.85)`];
-  return [`${base}0.04)`, `${base}0.65)`];
+  // Start alpha raised from 0.04 → 0.30 so the origin half of the arc is visible
+  // instead of fading to near-transparent. Ocean (blue) and truck (mint) were
+  // particularly hard to read against the night-earth texture at the old levels.
+  if (route.status === "blocked") return [`${base}0.14)`, "rgba(229,72,77,0.95)"];
+  if (route.status === "watch") return [`${base}0.35)`, `${base}0.95)`];
+  return [`${base}0.30)`, `${base}0.88)`];
 }
 
 export function routesFromShipments(shipments: AffectedShipment[]): GlobeRoute[] {

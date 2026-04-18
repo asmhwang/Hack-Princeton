@@ -10,10 +10,13 @@ import { arcColorForRoute } from "@/components/globe/routes";
 import { formatCurrency } from "@/lib/format";
 
 // Per-mode arc altitude. Rail/truck hug the surface; ocean rides low; air arches high.
+// Values nudged up from {rail/truck: 0.005, ocean: 0.05} so the tube-segment chords
+// don't dip below the globe mesh on long arcs (esp. Shanghai→Hamburg rail,
+// Shanghai→Rotterdam ocean).
 const MODE_ALTITUDE: Record<RouteMode, number> = {
-  rail:  0.005,
-  truck: 0.005,
-  ocean: 0.05,
+  rail:  0.02,
+  truck: 0.02,
+  ocean: 0.14,
   air:   0.22,
 };
 

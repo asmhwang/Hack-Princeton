@@ -49,7 +49,6 @@ from backend.tests.fixtures.typhoon import (
 )
 
 _WAIT_TIMEOUT_S = 30.0
-_POLL_INTERVAL_S = 0.25
 
 
 # ---------------------------------------------------------------------------
@@ -141,18 +140,21 @@ def _mock_trace(seed: TyphoonSeed) -> list[ToolInvocation]:
 
 
 class _NotifyWatcher:
-    """Subscribes to a channel and stores every payload it receives.
+    """Subscribes to a channel and signals when a matching payload arrives.
 
     Uses a dedicated ``EventBus`` because the Analyst agent already holds the
     LISTEN connection for ``new_disruption``; mixing channels on the same
     connection is fine, but the watcher owning its own bus keeps the test
     plumbing symmetric with production (separate agents → separate conns).
+
+    Event-driven instead of polled so slow CI never flakes on poll cadence.
     """
 
     def __init__(self, dsn: str, channel: str) -> None:
         self._bus = EventBus(dsn)
         self._channel = channel
         self.payloads: list[str] = []
+        self._arrived = asyncio.Event()
 
     async def start(self) -> None:
         await self._bus.start()
@@ -163,19 +165,30 @@ class _NotifyWatcher:
 
     async def _on(self, payload: str) -> None:
         self.payloads.append(payload)
+        self._arrived.set()
 
     async def wait_for(self, predicate: Any, timeout_s: float) -> str | None:
-        """Poll until a payload matching ``predicate`` arrives or timeout fires."""
-        deadline = asyncio.get_event_loop().time() + timeout_s
-        while asyncio.get_event_loop().time() < deadline:
-            for p in self.payloads:
+        """Return the first payload for which ``predicate`` is true, or None on timeout."""
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout_s
+        seen = 0
+        while True:
+            while seen < len(self.payloads):
+                p = self.payloads[seen]
+                seen += 1
                 try:
                     if predicate(p):
                         return p
                 except (ValueError, TypeError, json.JSONDecodeError):
                     continue
-            await asyncio.sleep(_POLL_INTERVAL_S)
-        return None
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                return None
+            self._arrived.clear()
+            try:
+                await asyncio.wait_for(self._arrived.wait(), timeout=remaining)
+            except TimeoutError:
+                return None
 
 
 # ---------------------------------------------------------------------------

@@ -21,6 +21,7 @@ covers all DB writes.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import uuid
 from pathlib import Path
@@ -125,6 +126,23 @@ async def _load_context(
     return ir, disruption, affected
 
 
+def _options_cache_key(ir: ImpactReportRow, d: Disruption) -> str:
+    """Content-stable cache key — disruption category + centroid + radius + title
+    + impact totals (exposure/units/depth). Offline replay hinges on this."""
+    parts = (
+        (d.category or "").strip().lower(),
+        f"{float(d.lat or 0):.4f}",
+        f"{float(d.lng or 0):.4f}",
+        f"{float(d.radius_km or 0):.1f}",
+        (d.title or "").strip().lower(),
+        str(ir.total_exposure or 0),
+        str(ir.units_at_risk or 0),
+        str(ir.cascade_depth or 0),
+    )
+    digest = hashlib.sha256("|".join(parts).encode()).hexdigest()
+    return f"strategist::content::{digest}"
+
+
 def _impact_context(
     ir: ImpactReportRow,
     d: Disruption,
@@ -211,7 +229,7 @@ async def generate_options(
         prompt,
         tools,
         final_schema=MitigationOptionsBundle,
-        cache_key=f"strategist::{impact_report_id}",
+        cache_key=_options_cache_key(ir, disruption),
         max_iters=_TOOL_CALL_MAX_ITERS,
     )
     bundle = cast(MitigationOptionsBundle, result)

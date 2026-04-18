@@ -44,7 +44,7 @@ Return a single JSON object matching `ImpactReport`:
   "cascade_depth": <1..5>,
   "sql_executed": "<concatenation of synthesized_sql across calls>",
   "reasoning_trace": {
-    "tool_calls": [...],
+    "tool_calls": [],
     "final_reasoning": "<1-3 sentences summarizing the chain>"
   },
   "affected_shipments": [
@@ -54,6 +54,8 @@ Return a single JSON object matching `ImpactReport`:
 ```
 
 Constraints:
+- `reasoning_trace.tool_calls` MUST be an empty array `[]`. The framework
+  populates the real trace from actual tool invocations — do not fabricate.
 - `affected_shipments` must be non-empty. If your tool chain surfaced no
   shipments, include a single entry for the nearest-to-centroid shipment with
   a conservative exposure estimate.

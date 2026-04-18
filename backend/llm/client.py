@@ -45,11 +45,74 @@ log = structlog.get_logger()
 
 # Gemini model slug aliases. Keep this tiny — add more as agents need them.
 _MODEL_ALIASES: dict[str, str] = {
-    "flash": "gemini-2.0-flash",
-    "pro": "gemini-2.0-pro",
+    "flash": "gemini-flash-lite-latest",
+    "pro": "gemini-flash-lite-latest",
 }
 
 _FENCE_RE = re.compile(r"^\s*```(?:json)?\s*|\s*```\s*$", re.MULTILINE)
+
+
+def _gemini_schema(schema: type[BaseModel]) -> dict[str, Any]:
+    """Convert a Pydantic model to a Gemini-compatible JSON-schema dict.
+
+    Gemini's ``response_schema`` / tool-parameter parser rejects several fields
+    that Pydantic v2 emits by default: ``additionalProperties``, ``title``,
+    ``$defs``, ``anyOf`` (for nullable). Strip them recursively.
+    """
+    raw = schema.model_json_schema()
+    return _sanitize_schema(raw, defs=raw.get("$defs", {}))
+
+
+_DROP_KEYS = frozenset(
+    {
+        "additionalProperties",
+        "title",
+        "$defs",
+        "default",
+        "prefixItems",
+        "exclusiveMinimum",
+        "exclusiveMaximum",
+    }
+)
+
+
+def _sanitize_schema(node: Any, defs: dict[str, Any]) -> Any:
+    if isinstance(node, dict):
+        if "$ref" in node:
+            ref = node["$ref"].rsplit("/", 1)[-1]
+            resolved = defs.get(ref, {})
+            return _sanitize_schema(resolved, defs)
+        if "anyOf" in node:
+            variants = [v for v in node["anyOf"] if v.get("type") != "null"]
+            if len(variants) == 1:
+                merged = {k: v for k, v in node.items() if k != "anyOf" and k not in _DROP_KEYS}
+                merged.update(variants[0])
+                return _sanitize_schema(merged, defs)
+        # Tuples: prefixItems defines ordered element types. Gemini does not
+        # support heterogeneous tuples; collapse to a single `items` entry when
+        # all prefix elements share a type.
+        if (
+            "prefixItems" in node
+            and "items" not in node
+            and isinstance(node["prefixItems"], list)
+            and node["prefixItems"]
+        ):
+            prefix_types = {p.get("type") for p in node["prefixItems"] if isinstance(p, dict)}
+            if len(prefix_types) == 1 and None not in prefix_types:
+                node = {**node, "items": {"type": next(iter(prefix_types))}}
+        out: dict[str, Any] = {}
+        for k, v in node.items():
+            if k in _DROP_KEYS:
+                continue
+            if k == "properties" and isinstance(v, dict):
+                # Property names are identifiers, not metadata — do not filter.
+                out[k] = {pk: _sanitize_schema(pv, defs) for pk, pv in v.items()}
+            else:
+                out[k] = _sanitize_schema(v, defs)
+        return out
+    if isinstance(node, list):
+        return [_sanitize_schema(v, defs) for v in node]
+    return node
 
 
 class LLMValidationError(RuntimeError):
@@ -180,6 +243,21 @@ class LLMClient:
         cache_key: str | None = None,
         max_iters: int = 6,
     ) -> tuple[BaseModel, list[ToolInvocation]]:
+        effective_key = cache_key or self._cache_key(prompt, final_schema)
+
+        cached = self._cache.get(effective_key)
+        if cached is not None:
+            try:
+                payload = json.loads(cached)
+                final = final_schema.model_validate(payload["final"])
+                trace = [ToolInvocation.model_validate(t) for t in payload.get("trace", [])]
+                return final, trace
+            except (ValidationError, ValueError, KeyError):
+                log.warning("llm.cache.corrupt", key=effective_key)
+
+        if self._cache.offline_mode:
+            raise LLMValidationError(f"offline: no cached tool-loop output for key={effective_key}")
+
         by_name: dict[str, Tool] = {t.name: t for t in tools}
         state = _LoopState(history=[_HistoryItem(role="user", content=prompt)])
 
@@ -211,6 +289,15 @@ class LLMClient:
                     raise LLMValidationError(
                         f"final_schema={final_schema.__name__} invalid: {err}"
                     ) from err
+                self._cache.put(
+                    effective_key,
+                    json.dumps(
+                        {
+                            "final": final.model_dump(mode="json"),
+                            "trace": [t.model_dump(mode="json") for t in state.trace],
+                        }
+                    ),
+                )
                 return final, state.trace
             raise LLMValidationError("model returned neither function_calls nor text")
 
@@ -249,8 +336,8 @@ class LLMClient:
         client = self._sdk_client()
 
         async for attempt in AsyncRetrying(
-            stop=stop_after_attempt(3),
-            wait=wait_exponential_jitter(initial=1, max=8),
+            stop=stop_after_attempt(6),
+            wait=wait_exponential_jitter(initial=2, max=45),
             retry=retry_if_exception_type(Exception),  # transport-level only
             reraise=True,
         ):
@@ -260,7 +347,7 @@ class LLMClient:
                     contents=prompt,
                     config=genai_types.GenerateContentConfig(
                         response_mime_type="application/json",
-                        response_schema=schema,
+                        response_schema=cast(Any, _gemini_schema(schema)),
                     ),
                 )
                 text = resp.text
@@ -283,7 +370,7 @@ class LLMClient:
                     genai_types.FunctionDeclaration(
                         name=t.name,
                         description=t.description,
-                        parameters=cast(Any, t.args_schema.model_json_schema()),
+                        parameters=cast(Any, _gemini_schema(t.args_schema)),
                     )
                 ]
             )
@@ -292,19 +379,21 @@ class LLMClient:
         contents = _history_to_contents(history)
 
         async for attempt in AsyncRetrying(
-            stop=stop_after_attempt(3),
-            wait=wait_exponential_jitter(initial=1, max=8),
+            stop=stop_after_attempt(6),
+            wait=wait_exponential_jitter(initial=2, max=45),
             retry=retry_if_exception_type(Exception),
             reraise=True,
         ):
             with attempt:
+                # Gemini rejects response_mime_type + response_schema when tools
+                # are present ("Function calling with a response mime type: …
+                # is unsupported"). Final-schema validation happens client-side
+                # against the free-form text response in the parser layer.
                 resp = await client.aio.models.generate_content(
                     model=self._model_name,
                     contents=contents,
                     config=genai_types.GenerateContentConfig(
                         tools=cast(Any, tool_decls),
-                        response_mime_type="application/json",
-                        response_schema=final_schema,
                     ),
                 )
                 fn_calls = _extract_function_calls(resp)

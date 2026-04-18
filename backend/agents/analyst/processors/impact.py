@@ -29,6 +29,7 @@ lives in ``impact_reports.sql_executed`` + ``affected_shipments``.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import uuid
 from decimal import Decimal
@@ -122,6 +123,23 @@ def _build_tool_list() -> list[Tool]:
 
 def _load_prompt_files() -> tuple[str, str]:
     return _IMPACT_SYSTEM.read_text(), _SCHEMA_SUMMARY.read_text()
+
+
+def _impact_cache_key(d: Disruption) -> str:
+    """Content-stable cache key: disruption category + centroid + radius + title.
+
+    Excludes the UUID and source_signal_ids — those rotate per simulate call
+    but don't affect the report's semantics. Offline replay relies on this.
+    """
+    parts = (
+        (d.category or "").strip().lower(),
+        f"{float(d.lat or 0):.4f}",
+        f"{float(d.lng or 0):.4f}",
+        f"{float(d.radius_km or 0):.1f}",
+        (d.title or "").strip().lower(),
+    )
+    digest = hashlib.sha256("|".join(parts).encode()).hexdigest()
+    return f"analyst::content::{digest}"
 
 
 def _disruption_context(d: Disruption) -> str:
@@ -323,7 +341,7 @@ async def build_impact_report(
             prompt,
             tools,
             final_schema=ImpactReport,
-            cache_key=f"analyst::{disruption_id}",
+            cache_key=_impact_cache_key(disruption),
             max_iters=_TOOL_CALL_MAX_ITERS,
         )
         report = cast(ImpactReport, result)

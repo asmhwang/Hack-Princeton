@@ -29,3 +29,6 @@ test-results/
 # Demo state
 /var/lib/supplai/
 backend/llm/*.sqlite
+
+# Git worktrees
+.worktrees/

@@ -232,8 +232,10 @@ export interface paths {
         put?: never;
         /**
          * Simulate
-         * @description Insert a Signal and Disruption row for the given scenario and
-         *     emit pg_notify on new_signal and new_disruption channels.
+         * @description Insert a placeholder Signal row and emit pg_notify new_signal.
+         *
+         *     Task 11 will wire the full scenario cascade. This stub gives Plan B a
+         *     testable Simulate button today.
          */
         post: operations["simulate_api_dev_simulate_post"];
         delete?: never;
@@ -589,17 +591,10 @@ export interface components {
              * Format: uuid
              */
             signal_id: string;
-            /**
-             * Disruption Id
-             * Format: uuid
-             */
-            disruption_id: string;
             /** Scenario */
             scenario: string;
-            /** Expected */
-            expected: {
-                [key: string]: unknown;
-            };
+            /** Note */
+            note: string;
         };
         /** StateSnapshot */
         StateSnapshot: {

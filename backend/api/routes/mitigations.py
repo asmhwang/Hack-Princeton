@@ -5,22 +5,42 @@ import uuid
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
 
-from backend.api.deps import SessionDep
+from backend.api._approval import ApprovalConflictError, approve_mitigation
+from backend.api.deps import SessionDep, UserDep
 from backend.db.models import MitigationOption
-from backend.schemas import MitigationOptionRecord
+from backend.schemas import ApprovalRecord, ApprovalResponse, MitigationOptionRecord
 
 router = APIRouter()
 
 
-@router.post("/{mitigation_id}/approve")
-async def approve_mitigation(
+@router.post("/{mitigation_id}/approve", response_model=ApprovalResponse)
+async def approve_route(
     mitigation_id: uuid.UUID,
-    session: SessionDep,
-) -> None:
-    """Stub — full atomic approval is implemented in Task 9.1 (C.7)."""
-    raise HTTPException(
-        status_code=501,
-        detail="Task 9.1 implements atomic approval",
+    user: UserDep,
+) -> ApprovalResponse:
+    """Atomically approve a mitigation option.
+
+    Flips all affected shipments to 'rerouting', writes an Approval audit row,
+    flips the mitigation status to 'approved', then fires a pg_notify.
+
+    All DB mutations are inside a single transaction; failure at any step
+    leaves zero partial state.
+    """
+    try:
+        result = await approve_mitigation(mitigation_id, user)
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=404, detail=f"mitigation {mitigation_id} not found"
+        ) from exc
+    except ApprovalConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"approval failed: {exc}") from exc
+
+    return ApprovalResponse(
+        approval=ApprovalRecord.model_validate(result["approval"]),
+        shipments_flipped=result["shipments_flipped"],  # type: ignore[arg-type]
+        drafts_saved=result["drafts_saved"],  # type: ignore[arg-type]
     )
 
 

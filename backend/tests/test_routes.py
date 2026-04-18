@@ -176,18 +176,15 @@ async def test_get_disruption_mitigations_empty_when_no_impact():
 
 
 # ---------------------------------------------------------------------------
-# /api/mitigations/:id/approve — must return 501
+# /api/mitigations/:id/approve — unknown ID returns 404 (Task 9.1 implemented)
 # ---------------------------------------------------------------------------
 
 
-async def test_approve_mitigation_returns_501():
+async def test_approve_mitigation_returns_404_for_unknown():
     random_id = uuid.uuid4()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         r = await c.post(f"/api/mitigations/{random_id}/approve")
-    assert r.status_code == 501
-    body = r.json()
-    assert "detail" in body
-    assert "9.1" in body["detail"] or "approval" in body["detail"].lower()
+    assert r.status_code == 404
 
 
 # ---------------------------------------------------------------------------

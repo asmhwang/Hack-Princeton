@@ -69,9 +69,7 @@ class _Cache:
 
     def get(self, key: str) -> list[dict[str, Any]] | None:
         with self._connect() as conn:
-            row = conn.execute(
-                "SELECT payload FROM tavily_cache WHERE key = ?", (key,)
-            ).fetchone()
+            row = conn.execute("SELECT payload FROM tavily_cache WHERE key = ?", (key,)).fetchone()
         if row is None:
             return None
         try:

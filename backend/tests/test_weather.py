@@ -71,9 +71,7 @@ def _transport(payload: dict[str, Any]) -> httpx.MockTransport:
 
 
 @pytest.mark.asyncio
-async def test_wind_threshold_emits_signal(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_wind_threshold_emits_signal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     recorder = _IngestRecorder()
     monkeypatch.setattr(weather, "ingest_prebuilt_signal", recorder.record)
 

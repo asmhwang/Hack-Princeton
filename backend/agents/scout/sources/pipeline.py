@@ -86,9 +86,7 @@ async def _persist_and_notify(
         lat=classification.lat,
         lng=classification.lng,
         radius_km=(
-            Decimal(str(classification.radius_km))
-            if classification.radius_km is not None
-            else None
+            Decimal(str(classification.radius_km)) if classification.radius_km is not None else None
         ),
         source_urls=source_urls,
         confidence=Decimal(str(classification.confidence)),

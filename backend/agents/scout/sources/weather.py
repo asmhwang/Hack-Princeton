@@ -78,15 +78,9 @@ async def _fetch(
 def _detect_triggers(data: dict[str, Any]) -> tuple[list[str], dict[str, float]]:
     current_wind = float(data.get("current", {}).get("wind_speed_10m", 0.0) or 0.0)
     hourly = data.get("hourly", {}) or {}
-    winds = [float(v or 0.0) for v in (hourly.get("wind_speed_10m") or [])][
-        :_FORECAST_WINDOW_HOURS
-    ]
-    precip = [float(v or 0.0) for v in (hourly.get("precipitation") or [])][
-        :_FORECAST_WINDOW_HOURS
-    ]
-    codes = [int(v or 0) for v in (hourly.get("weather_code") or [])][
-        :_FORECAST_WINDOW_HOURS
-    ]
+    winds = [float(v or 0.0) for v in (hourly.get("wind_speed_10m") or [])][:_FORECAST_WINDOW_HOURS]
+    precip = [float(v or 0.0) for v in (hourly.get("precipitation") or [])][:_FORECAST_WINDOW_HOURS]
+    codes = [int(v or 0) for v in (hourly.get("weather_code") or [])][:_FORECAST_WINDOW_HOURS]
 
     max_wind = max([current_wind, *winds]) if winds else current_wind
     precip_24h = sum(precip)

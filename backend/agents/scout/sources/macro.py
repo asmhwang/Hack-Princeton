@@ -48,9 +48,7 @@ QUERIES: list[str] = [
 
 
 class _Client(Protocol):
-    async def search(
-        self, query: str, *, topic: str, days: int = 1
-    ) -> list[dict[str, Any]]: ...
+    async def search(self, query: str, *, topic: str, days: int = 1) -> list[dict[str, Any]]: ...
 
 
 class _Bus(Protocol):

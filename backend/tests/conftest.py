@@ -55,12 +55,25 @@ _TRUNCATE_SQL = (
 # ---------------------------------------------------------------------------
 
 
+# Mutable container avoids a `global` statement (ruff PLW0603) while still
+# letting fixtures share a session-wide flag.
+_pg: dict[str, bool] = {"available": False}
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _ensure_test_db() -> None:
-    """Create supplai_test and run alembic migrations if needed (sync)."""
+    """Create supplai_test and run alembic migrations if Postgres is reachable.
 
-    async def _create_db_if_missing() -> None:
-        conn = await asyncpg.connect(_ADMIN_DSN)
+    If Postgres is not running (e.g. LLM-only worktree with no DB dependency),
+    silently skip DB setup. DB-dependent tests will still fail loudly when they
+    try to open a session; tests that do not touch the DB run unaffected.
+    """
+
+    async def _create_db_if_missing() -> bool:
+        try:
+            conn = await asyncpg.connect(_ADMIN_DSN, timeout=3)
+        except (OSError, asyncpg.PostgresError):
+            return False
         try:
             exists = await conn.fetchval(
                 "SELECT 1 FROM pg_database WHERE datname = $1", _TEST_DB_NAME
@@ -70,8 +83,11 @@ def _ensure_test_db() -> None:
                 await conn.execute(f'CREATE DATABASE "{_TEST_DB_NAME}"')
         finally:
             await conn.close()
+        return True
 
-    asyncio.run(_create_db_if_missing())
+    _pg["available"] = asyncio.run(_create_db_if_missing())
+    if not _pg["available"]:
+        return
 
     # Run alembic upgrade head against the test DB.
     env = {**os.environ, "DATABASE_URL": _TEST_DSN_SQLALCHEMY}
@@ -102,6 +118,9 @@ async def _clean_db_state() -> None:  # type: ignore[return]
     # event loop — prevents "attached to a different loop" errors.
     engine.cache_clear()
     _sessionmaker.cache_clear()
+
+    if not _pg["available"]:
+        return
 
     # Truncate via raw asyncpg — no pool, no loop binding issues.
     conn = await asyncpg.connect(_TEST_DSN_ASYNCPG)

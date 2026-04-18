@@ -1,249 +1,178 @@
-# Worktree 3 — `a/agent-base-infra`
+# WT `hp-analyst` — `a/analyst`
 
-> **Parent plan:** `docs/superpowers/plans/2026-04-18-plan-A-agents-infra.md` (Tasks A.3 + A.7)
+> **Parent plan:** `docs/superpowers/plans/2026-04-18-plan-A-agents-infra.md` (Task A.5)
 > **Master task specs:** `docs/superpowers/plans/2026-04-18-suppl-ai-implementation.md`
->   - Task 2.5 Agent base class (lines 1358–1438)
->   - Task 12.1 Dedalus VMs + systemd units (line 2034)
->   - Task 12.3 Agent restart persistence test (line 2048)
->   - Task 12.4 Offline cache priming (line 2055)
+>   - Task 6.1 Impact processor tool loop (line 1735)
+>   - Task 6.2 Rules-based fallback by category (line 1752)
+>   - Task 6.3 Analyst `main.py` (line 1762)
 > **Coordination:** `docs/superpowers/plans/2026-04-18-parallel-coordination.md`
-> **Branch:** `a/agent-base-infra` → PR into `main` (rebased onto `3ebb01d`)
-> **Est effort:** 2h base + 3h infra = ~5h
-> **Upstream state after 3ebb01d:**
-> - `backend/db/bus.py` (WT1) merged — import `EventBus` directly, **no stub needed**.
-> - `backend/llm/client.py` + `backend/llm/prompt_cache.py` (WT2) merged — real `LLMClient` available (AgentBase doesn't use it directly; subclasses do).
-> - `backend/llm/tools/` (Plan C Task 2.6) merged — bonus, unblocks future Analyst worktree.
-> - `backend/schemas/*` + `backend/api/validators/sql_guard.py` merged — schema-agnostic base class, no impact here.
+> **Branch:** `a/analyst` → PR into `main` (branched from `7c5a5b2`)
+> **Est effort:** ~5h (strict TDD on tool loop)
 
 ## Charter
 
-Two responsibilities fused because both cut across all three agents:
+Analyst VM subscribes to `new_disruption`; for each disruption, runs Gemini Pro in the function-calling loop using the 7 analyst tools (shipped via `backend/llm/tools/analyst_tools.py`). Produces: `ImpactReport` + `AffectedShipment[]` + synthesized-SQL string (explainability) + reasoning trace. Writes rows; emits `new_impact`. End-to-end ≤ 30s on typhoon fixture.
 
-1. **`AgentBase` class** — the lifecycle contract every agent (Scout/Analyst/Strategist) subclasses. Handles: `EventBus` start/stop, channel subscription, checkpoint load/save (`state.json`), health HTTP endpoint, structlog trace setup.
-
-2. **Dedalus VM infra** — `systemd` unit files per agent, deploy script, offline-cache priming loader, `scripts/smoke.py` health check. The judging requirement "restart resumes from checkpoint without duplicate signals" is validated here.
-
-WT3 assumes WT1 (bus) and WT2 (llm client) interfaces. It can stub-import them until those PRs merge. After merge → rebase and run integration test.
+All upstream deps shipped:
+- `AgentBase`, `EventBus`, `LLMClient.with_tools`, `LLMClient.cached_context`
+- 7 analyst tools in `backend/llm/tools/analyst_tools.py` (Plan C Task 2.6, commit `d01fc0b`)
+- Pydantic schemas: `ImpactReport`, `AffectedShipment`, etc. in `backend/schemas/impact.py`
+- SQL guard `backend/api/validators/sql_guard.py` for storing `impact_reports.sql_executed`
 
 ## Deliverables
 
 | # | File | Type | Purpose |
 |---|---|---|---|
-| 1 | `backend/agents/__init__.py` | new | package marker |
-| 2 | `backend/agents/base.py` | new | `AgentBase` — lifecycle, LISTEN, checkpoint, health |
-| 3 | `backend/tests/test_agent_base.py` | new | TDD: `test_checkpoint_survives_restart` + trivial subclass counter |
-| 4 | `infra/systemd/supplai-scout.service` | new | scout unit, `Restart=on-failure`, `StateDirectory=supplai` |
-| 5 | `infra/systemd/supplai-analyst.service` | new | analyst unit, same pattern |
-| 6 | `infra/systemd/supplai-strategist.service` | new | strategist unit, same pattern |
-| 7 | `infra/systemd/README.md` | new | deploy steps per Dedalus VM |
-| 8 | `infra/scripts/deploy.sh` | new | rsync code, install unit, `systemctl daemon-reload` + `enable` + `start` |
-| 9 | `scripts/smoke.py` | new | hits `/health` on each VM + API VM, prints table, exits non-zero on failure |
-| 10 | `backend/llm/cache_loader.py` | new | reads `backend/llm/*.sqlite.seed` → copies into active cache path at boot when `DEMO_OFFLINE_CACHE=true` |
-| 11 | `backend/tests/test_cache_loader.py` | new | TDD: loader copies seed, skips if target exists, skips if env flag off |
+| 1 | `backend/agents/analyst/__init__.py` | new | package marker |
+| 2 | `backend/agents/analyst/processors/__init__.py` | new | package marker |
+| 3 | `backend/agents/analyst/processors/impact.py` | new | `build_impact_report(disruption_id)` — tool loop + persist |
+| 4 | `backend/agents/analyst/processors/fallback.py` | new | rules-based template per `disruption.category`; no LLM |
+| 5 | `backend/agents/analyst/prompts/impact_system.md` | new | system prompt: Analyst role + tool descriptions + final schema ref |
+| 6 | `backend/agents/analyst/prompts/schema_summary.md` | new | DB schema summary fed via `LLMClient.cached_context` once per process |
+| 7 | `backend/agents/analyst/main.py` | new | `class AnalystAgent(AgentBase)` with `channels=["new_disruption"]`; `on_notify` orchestrates impact → fallback → NOTIFY |
+| 8 | `backend/agents/analyst/config.py` | new | model choice (pro), max tool iters, schema-cache TTL |
+| 9 | `backend/agents/analyst/state.py` | new | last-processed disruption cursor, tool-call counts |
+| 10 | `backend/tests/test_impact.py` | new | TDD: mocked tool loop produces ImpactReport; `total_exposure` within ±10% of $2.3M; reasoning_trace len==4 |
+| 11 | `backend/tests/test_fallback.py` | new | TDD: on `LLMValidationError`, fallback still writes report per category template |
+| 12 | `backend/tests/test_analyst_main.py` | new | integration: publish `NOTIFY new_disruption, <uuid>` → row + `new_impact` within 30s |
+| 13 | `backend/tests/fixtures/typhoon.py` | new (or augment) | seeds 13–15 shipments around Shenzhen with known ground-truth $2.3M exposure |
 
 ## TDD sequence
 
 ```
-# Phase A: AgentBase — EventBus already on main, no stubs needed
-1. cd ../Hack-Princeton-agent-base-infra
-2. Write backend/tests/test_agent_base.py per master plan §2.5 Step 1 (imports real EventBus)
-3. uv run pytest backend/tests/test_agent_base.py -v        # fails (no base.py yet)
-4. Implement backend/agents/base.py (verbatim skeleton from master plan §2.5 Step 3)
-5. pytest → green (checkpoint survives restart + counter semantics)
-6. uv run mypy --strict backend/agents/base.py
-7. Commit: "feat(agents): base class with lifecycle, LISTEN, checkpoint, health endpoint"
+1. cd /Users/ahwang06/Documents/hackprinceton/hp-analyst
 
-# Phase B: Infra (parallelizable with Phase A after test file written)
-8. Write infra/systemd/*.service + deploy.sh + smoke.py + cache_loader.py
-9. Write backend/tests/test_cache_loader.py
-10. Run tests; all green
-11. Commit: "feat(infra): dedalus systemd units + smoke + offline cache loader"
+# Phase A: impact processor
+2. Write backend/agents/analyst/prompts/impact_system.md (role + tool table + final schema).
+3. Write backend/tests/fixtures/typhoon.py (seed helper: 13–15 shipments, known $2.3M ground truth).
+4. Write backend/tests/test_impact.py per master plan §6.1 Step 2 (mock `LLMClient.with_tools`).
+5. pytest → fails.
+6. Implement backend/agents/analyst/processors/impact.py:
+   - load_disruption(disruption_id) -> Disruption
+   - build_prompt(disruption, cached_schema_handle) -> str
+   - result, trace = await llm.with_tools(prompt, analyst_tools, final_schema=ImpactReport)
+   - persist: impact_reports row + AffectedShipment upserts (ON CONFLICT DO NOTHING) + concatenate synthesized_sql.
+   - NOTIFY new_impact with payload {"id": uuid, "disruption_id": uuid, "total_exposure": "<decimal>"}.
+7. Green.
 
-# Phase C: Push
-12. git fetch origin; git rebase origin/main             # absorb any teammate work
-13. Re-run full pytest; mypy strict on backend/agents/base.py + backend/llm/cache_loader.py
-14. git push -u origin a/agent-base-infra
-15. gh pr create --base main --title "feat(agents): base + dedalus infra" --body "Closes A.3 + A.7"
+# Phase B: fallback
+8. Write backend/tests/test_fallback.py.
+9. Implement backend/agents/analyst/processors/fallback.py — rules-based templates per DisruptionCategory (weather: radius query, policy: SKU-family, logistics: port-filter, etc.) calling analyst_tools DIRECTLY, no LLM.
+10. Green.
+
+# Phase C: main.py + integration
+11. Write backend/agents/analyst/main.py (subclass AgentBase, channels=["new_disruption"]).
+12. Write backend/agents/analyst/state.py + config.py.
+13. Write backend/tests/test_analyst_main.py: publish NOTIFY → assert row within 30s.
+14. uv run pytest backend/tests/test_impact.py backend/tests/test_fallback.py backend/tests/test_analyst_main.py -v
+15. uv run mypy --strict backend/agents/analyst
+16. uv run ruff check backend/agents/analyst backend/tests
+
+17. Commits:
+    - "feat(analyst): impact processor with Gemini tool loop"
+    - "feat(analyst): rules-based fallback by disruption category"
+    - "feat(analyst): main agent wires tool loop + fallback + NOTIFY new_impact"
+
+18. git push -u origin a/analyst
+19. gh pr create --base main --title "feat(analyst): impact reports via Gemini tool-calling" --body "Closes tasks 6.1-6.3"
 ```
 
-## `AgentBase` public contract (freeze — Scout/Analyst/Strategist depend on this)
+## `build_impact_report` contract
 
 ```python
-from __future__ import annotations
-import asyncio, json
-from pathlib import Path
-from typing import Any
-import structlog
-from backend.db.bus import EventBus
-from backend.observability.logging import new_trace
-
-log = structlog.get_logger()
-
-class AgentBase:
-    name: str = "agent"
-    channels: list[str] = []
-    state_path: Path = Path("/var/lib/supplai/state.json")
-    health_port: int = 0  # subclass sets (scout=9101, analyst=9102, strategist=9103)
-
-    def __init__(self, dsn: str) -> None: ...
-    async def start(self) -> None: ...          # load state, start bus, subscribe, launch bg tasks, start health server
-    async def stop(self) -> None: ...           # cancel bg tasks, stop bus, save state
-    async def on_notify(self, channel: str, payload: str) -> None: ...  # subclass overrides
-    def background_tasks(self) -> list: return []                       # subclass overrides
-
-    # Subclass helpers (not to be overridden)
-    async def checkpoint(self, key: str, value: Any) -> None: ...       # mutates self._state + flushes
-    def checkpoint_get(self, key: str, default: Any = None) -> Any: ...
-    def _load_state(self) -> dict: ...
-    def _save_state(self) -> None: ...
+async def build_impact_report(disruption_id: UUID) -> UUID:
+    """Load disruption → run LLMClient.with_tools(analyst_tools, final_schema=ImpactReport)
+       → persist impact_reports row + AffectedShipment upserts + NOTIFY new_impact.
+       Returns impact_reports.id.
+       Raises LLMValidationError (caller catches → invokes fallback)."""
 ```
 
-**Required behaviour:**
+Prompt body (concatenation):
+1. `impact_system.md` (role + tool descriptions + ImpactReport schema ref).
+2. **Cached context handle** to `schema_summary.md` via `LLMClient.cached_context("analyst_schema_v1", schema_md)` — memoized once per process.
+3. Disruption context (title, category, severity, region_label, source_signal_ids).
+4. Instruction: "End with a structured ImpactReport."
 
-- `new_trace()` called at start of every `_wrap(channel)` dispatcher → every notify handler gets a fresh `trace_id` in structlog context.
-- Exceptions in `on_notify` **must** be caught + logged (`agent.handler_failed`), never propagate out of `_dispatch` — otherwise one bad payload crashes the listener.
-- `state.json` is written atomically: write to `state.json.tmp` + `os.replace`. A crash mid-write must not corrupt state.
-- Health endpoint: small `aiohttp` or `uvicorn` app on `127.0.0.1:<health_port>`, single route `GET /health` → `{"agent": name, "ok": true, "uptime_s": <int>, "last_notify": <iso ts | null>}`.
-- `stop()` completes within 5s even if handlers are mid-flight (cancel + gather with `return_exceptions=True`).
+Tool set passed to `with_tools`: the 7 tools from `backend/llm/tools/analyst_tools.py`:
+- `shipments_touching_region`
+- `purchase_orders_for_skus`
+- `customers_by_po`
+- `exposure_aggregate`
+- `alternate_suppliers_for_sku`
+- `alternate_ports_near`
+- `shipment_history_status`
 
-## Systemd unit template
+Each tool returns `{"rows": [...], "synthesized_sql": "...", "row_count": N}`. Concatenate `synthesized_sql` across tool calls into `impact_reports.sql_executed` for the explainability drawer.
 
-```ini
-# infra/systemd/supplai-scout.service
-[Unit]
-Description=suppl.ai Scout agent
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=supplai
-WorkingDirectory=/opt/supplai
-Environment="PYTHONPATH=/opt/supplai"
-EnvironmentFile=/etc/supplai/env
-ExecStart=/usr/local/bin/uv run python -m backend.agents.scout.main
-StateDirectory=supplai
-Restart=on-failure
-RestartSec=3
-StandardOutput=journal
-StandardError=journal
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Analyst + Strategist identical modulo `Description` + `ExecStart` module path. `StateDirectory=supplai` → `/var/lib/supplai/` readable by the user for checkpoint writes.
-
-## `smoke.py` contract
-
+Persist steps (in a single DB tx):
 ```python
-# scripts/smoke.py
-# CLI: uv run python scripts/smoke.py --scout <url> --analyst <url> --strategist <url> --api <url>
-# Output: pretty table — name / url / status_code / ok flag.
-# Exit 0 iff all four return {"ok": true}. Exit 1 otherwise.
-# Used in Task 12.3 restart test + demo-day pre-flight.
+async with session.begin():
+    ir = ImpactReport(... from result ..., sql_executed=synthesized_sql_concat, reasoning_trace={"tool_calls": [t.model_dump() for t in trace]})
+    session.add(ir)
+    for s in result.affected_shipments:
+        stmt = insert(AffectedShipment).values(...).on_conflict_do_nothing(...)
+        await session.execute(stmt)
+await bus.publish("new_impact", json.dumps({"id": str(ir.id), "disruption_id": str(disruption_id), "total_exposure": str(ir.total_exposure)}))
 ```
 
-## Cache loader (Task 12.4) contract
+## Fallback rules (by `DisruptionCategory`)
 
-```python
-# backend/llm/cache_loader.py
-def prime_cache_if_offline(seed_dir: Path, target: Path) -> None:
-    """At boot, if DEMO_OFFLINE_CACHE=true and <target> does not exist,
-       copy <seed_dir>/prompt_cache.sqlite.seed -> <target>.
-       Idempotent: never overwrites an existing cache DB.
-       No-op if env flag off."""
-```
+| Category | Template |
+|---|---|
+| `weather` | radius search around `disruption.centroid_lat/lng` at 500km → shipments → POs → customers → exposure |
+| `policy` | filter shipments by `sku.category` matching disruption's affected SKU families |
+| `logistics` | filter shipments by origin/destination `port_id` in `disruption.affected_port_ids` |
+| `macro` | freight-rate / fuel proxy: mark all in-transit shipments as exposed to delta; low-confidence report |
+| `labor` | same as logistics (port strike) |
 
-- Seed files themselves (`*.sqlite.seed`) are produced in Task 12.4 post-integration; not committed here.
-- Called from each agent `main.py` at startup (WT3 just provides the helper; agent `main.py`s are separate WTs).
-
-## Test specifications
-
-### `test_agent_base.py` (TDD, per master plan §2.5)
-
-```python
-# Minimal subclass: subscribes to 'test_agent_ch', increments counter['n'] on each payload.
-class _Counter(AgentBase):
-    name = "counter"
-    channels = ["test_agent_ch"]
-    async def on_notify(self, channel, payload):
-        self._state["n"] = self._state.get("n", 0) + 1
-
-async def test_checkpoint_survives_restart(postgresql_url, tmp_path, monkeypatch):
-    monkeypatch.setattr(_Counter, "state_path", tmp_path / "state.json")
-    a1 = _Counter(postgresql_url)
-    await a1.start()
-    bus = EventBus(postgresql_url); await bus.start()
-    for _ in range(3): await bus.publish("test_agent_ch", "x")
-    await asyncio.sleep(0.3)
-    await a1.stop()
-    # Restart
-    a2 = _Counter(postgresql_url); await a2.start()
-    assert a2._state["n"] == 3
-    await a2.stop()
-```
-
-### `test_cache_loader.py`
-
-```python
-def test_copies_seed_when_offline_and_target_missing(tmp_path, monkeypatch):
-    monkeypatch.setenv("DEMO_OFFLINE_CACHE", "true")
-    seed = tmp_path / "seeds"; seed.mkdir()
-    (seed / "prompt_cache.sqlite.seed").write_bytes(b"payload")
-    target = tmp_path / "cache.sqlite"
-    prime_cache_if_offline(seed, target)
-    assert target.read_bytes() == b"payload"
-
-def test_noop_when_env_flag_off(tmp_path, monkeypatch):
-    monkeypatch.delenv("DEMO_OFFLINE_CACHE", raising=False)
-    ...
-
-def test_noop_when_target_exists(...):
-    ...
-```
+Each template chains 3–4 `analyst_tools` calls directly (no LLM). Produces ImpactReport with `source="fallback"` in `reasoning_trace`.
 
 ## Ship/consume contracts
 
 - **SHIPS**:
-  - `AgentBase` → consumed by Scout (`backend/agents/scout/main.py` WT4 + future), Analyst, Strategist `main.py`.
-  - `cache_loader.prime_cache_if_offline` → called from each agent `main.py` at startup.
-  - `infra/systemd/*.service` + `infra/scripts/deploy.sh` → deploy automation; reviewers read these.
-  - `scripts/smoke.py` → Task 12.3 restart-persistence test uses this.
-- **CONSUMES**:
-  - `EventBus` from `backend.db.bus` — shipped in `f288bfa`, import directly.
-  - `LLMClient` from `backend.llm.client` — shipped in `f921e31`. AgentBase doesn't instantiate it; subclasses do.
-  - `backend/observability/logging.new_trace` (already exists in foundation).
+  - `AnalystAgent` — systemd unit `supplai-analyst.service` already on main (from WT3 `cf19e06`). `ExecStart=/usr/local/bin/uv run python -m backend.agents.analyst.main`.
+  - `NOTIFY new_impact` on every impact report (success or fallback).
+- **CONSUMES** (all on main):
+  - `backend.agents.base.AgentBase` (channels=["new_disruption"])
+  - `backend.db.bus.EventBus`
+  - `backend.llm.client.LLMClient` (`.with_tools`, `.cached_context`, `.structured`)
+  - `backend.llm.tools.analyst_tools` (7 tools)
+  - `backend.schemas.{ImpactReport, AffectedShipment}` + `DisruptionRecord`, `DisruptionCategory`
+  - `backend.db.session`
+  - `backend.api.validators.sql_guard.SqlSafetyError` — validate the concatenated `sql_executed` before persist (defense in depth; guard rejects anything other than single SELECT).
 
 ## Definition of done
 
-- [ ] `uv run pytest backend/tests/test_agent_base.py backend/tests/test_cache_loader.py -v` green.
-- [ ] `uv run mypy --strict backend/agents/base.py backend/llm/cache_loader.py` clean.
-- [ ] `uv run ruff check backend/agents backend/llm/cache_loader.py scripts/smoke.py` clean.
-- [ ] `infra/systemd/*.service` files valid: `systemd-analyze verify infra/systemd/supplai-scout.service` (run on any Linux box with systemd installed — at minimum manual review for required fields).
-- [ ] `infra/scripts/deploy.sh` is executable (`chmod +x`) + self-documenting usage on `--help`.
-- [ ] `scripts/smoke.py --help` works without live targets.
-- [ ] PR description includes a sequence diagram of agent startup: `load_state → bus.start → subscribe(channels) → spawn bg tasks → health server up`.
-- [ ] After WT1 merged: final rebase, re-run full pytest — green. Push.
-- [ ] PR merged into `main` before WT4's Scout `main.py` is wired (future WT, not this one).
+- [ ] `uv run pytest backend/tests/test_impact.py backend/tests/test_fallback.py backend/tests/test_analyst_main.py -v` green.
+- [ ] `uv run mypy --strict backend/agents/analyst` clean.
+- [ ] `uv run ruff check backend/agents/analyst backend/tests/test_impact.py backend/tests/test_fallback.py backend/tests/test_analyst_main.py` clean.
+- [ ] Typhoon fixture: `NOTIFY new_disruption` → ImpactReport in `impact_reports` with `total_exposure` within ±10% of $2.3M within 30s.
+- [ ] `reasoning_trace.tool_calls` length ≥3 on typhoon; matches tool names from `analyst_tools.py`.
+- [ ] Fallback path: forcing `LLMValidationError` yields a report (possibly less detailed) — still written, `source="fallback"`.
+- [ ] `impact_reports.sql_executed` non-empty and passes `SqlSafetyError`-style validation.
+- [ ] `grep -r "smtplib\|sendmail\|smtp" backend/agents/analyst/` empty.
+- [ ] PR merged into `main` before Strategist WT7 starts (Strategist subscribes to `new_impact`).
 
 ## Known gotchas
 
-- **`state.json` atomic write on macOS vs Linux:** `os.replace` is atomic on both, but if dev on macOS and deploy to Linux, permission bits differ. Use explicit `chmod 0o600` on state file write (contains no secrets but future-proofs).
-- **Signal handling:** Dedalus systemd sends `SIGTERM` on stop. asyncio doesn't auto-handle → register `loop.add_signal_handler(signal.SIGTERM, lambda: asyncio.create_task(agent.stop()))` in `main.py`. This worktree surfaces the hook; the agent `main.py`s wire it.
-- **Health endpoint port collisions in tests:** Use `health_port=0` (ephemeral) in test subclasses so multiple parallel test cases don't fight over a port. Production: explicit `9101/9102/9103`.
-- **`_load_state()` must tolerate corrupt JSON**, not just missing file. Return `{}` and log a warning — don't crash the agent on startup.
-- **Checkpoint timing:** `_save_state()` runs on `stop()`. If a handler is running when SIGTERM arrives, we may lose the last increment. Pattern: handlers call `await self.checkpoint(...)` after each significant mutation; don't rely only on shutdown flush. Document this in the docstring.
+- **Gemini Pro vs Flash:** use **Pro** for Analyst tool loop (complex reasoning); Flash is fine for Scout classifier. Configure via `LLMClient(model="pro")`.
+- **Tool loop max iterations:** `max_iters=6` default. If Gemini exceeds, `with_tools` raises — catch + invoke fallback.
+- **Schema cache TTL:** `cached_context` creates a server-side cached-content handle. Gemini API minimum: ~32K tokens. If `schema_summary.md` below threshold, `cached_context` no-ops and returns empty string per WT2 plan — caller falls back to uncached prompt. Document behavior in logs.
+- **`ImpactReport.total_exposure` is Decimal**; NOTIFY payload must `str(decimal)` to preserve precision — frozen in coordination doc §2.
+- **Race on same `disruption_id`:** two Analyst instances could double-write. Use `INSERT ... ON CONFLICT (disruption_id) DO NOTHING` on `impact_reports` (one per disruption; the unique index enforces).
+- **Reasoning trace size:** `trace` list can balloon. Truncate each tool's `rows` array to first 10 entries before persisting into `reasoning_trace` JSON — full data is already in `impact_reports.sql_executed` + `affected_shipments`.
+- **Tool error handling:** if a tool callable raises, the loop should log + return `{"error": str}` as the function_response so Gemini can choose another tool — never crash the loop.
+- **NOTIFY order matters for Plan B UI:** Plan B animates impact cards in arrival order. Ensure `new_impact` NOTIFY is the **last** thing after the tx commits.
 
 ## Out of scope
 
-- Agent-specific `main.py` modules (Scout/Analyst/Strategist) — future WTs.
-- Building the actual `sqlite.seed` files — Task 12.4 runtime step post-integration.
-- Nginx reverse-proxy — Task 12.1 Step 3 is "optional if time permits".
-- Vercel deploy — Plan B / C concern.
+- Schema changes.
+- Adding new analyst tools — would require coordination (all 3 plans).
+- Strategist (Phase 7) — next WT.
+- Live VM smoke test (Task 12.3) — future WT.
 
 ## Escalation
 
-- WT1 (event-bus) + WT2 (llm-client) already merged — no upstream blockers remain.
-- If Dedalus provides custom metadata fields in `systemd` units we haven't seen → check runbook, adapt, document in PR.
-- If `aiohttp` not desired for health endpoint → fall back to stdlib `http.server` in a thread (documented alternative).
+- Gemini consistently invalid JSON → check `response_schema` binding in `with_tools` (final_schema param). Do not disable retry. Escalate if persistent.
+- Ground-truth typhoon exposure drifts from $2.3M → `fixtures/typhoon.py` seed may have changed in a teammate's PR. Re-verify with `exposure_aggregate` tool directly before debugging the LLM.
+- OpenClaw NOT needed here (Strategist only).

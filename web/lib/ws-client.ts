@@ -6,9 +6,10 @@ import { useWarRoomStore } from "@/lib/store";
 import { queryKeys } from "@/lib/query-keys";
 import { wsEventSchema, type WsEvent } from "@/types/schemas";
 
-const WS_BASE_URL =
+const WS_BASE_URL = (
   process.env.NEXT_PUBLIC_WS_URL ??
-  `${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"}`.replace(/^http/, "ws");
+  `${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"}`.replace(/^http/, "ws")
+).replace(/\/ws\/updates\/?$/, "").replace(/\/$/, "");
 
 type EventHandler = (event: WsEvent) => void;
 

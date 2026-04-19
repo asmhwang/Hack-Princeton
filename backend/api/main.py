@@ -39,7 +39,7 @@ app.add_middleware(
         "http://localhost:3000",
         "https://suppl-ai-seven.vercel.app",
     ],
-    allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_origin_regex=r"https://.*\.(vercel\.app|ngrok-free\.dev|ngrok\.app|ngrok\.io)",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

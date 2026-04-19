@@ -57,6 +57,11 @@ export function DisruptionHeader({ disruption, impact }: DisruptionHeaderProps) 
   const token = categoryTokens[disruption.category];
   const detectedAt = eventTime(disruption.detected_at ?? disruption.first_seen_at);
   const exposure = impact?.total_exposure ?? disruption.total_exposure;
+  // Prefer the impact report's actual affected_shipments list. The
+  // single-disruption endpoint doesn't populate affected_shipments_count
+  // (that only comes through the list JOIN), so relying on the disruption
+  // record alone shows "0" on the detail view.
+  const shipmentCount = impact?.affected_shipments?.length ?? disruption.affected_shipments_count;
   let statusColor = "var(--color-ok)";
   if (disruption.status === "active") statusColor = "var(--color-critical)";
   else if (disruption.status === "monitoring") statusColor = "var(--color-warn)";
@@ -137,7 +142,7 @@ export function DisruptionHeader({ disruption, impact }: DisruptionHeaderProps) 
         >
           <StatCell label="Severity" value={`${disruption.severity}/5`} accent={severityColor(disruption.severity)} />
           <StatCell label="Exposure" value={formatCurrency(exposure)} />
-          <StatCell label="Shipments" value={disruption.affected_shipments_count} />
+          <StatCell label="Shipments" value={shipmentCount} />
           <StatCell label="Status" value={disruption.status} accent={statusColor} upper />
         </div>
       </div>

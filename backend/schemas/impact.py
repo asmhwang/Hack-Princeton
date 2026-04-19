@@ -13,6 +13,20 @@ class AffectedShipmentEntry(BaseModel):
     shipment_id: str
     exposure: Decimal
     days_to_sla_breach: int | None
+    # Optional enrichments populated by the /disruptions/{id}/impact route by
+    # JOINing shipments → purchase_orders → customers / skus / ports. The
+    # Analyst's raw write path leaves these as None; read endpoints fill them.
+    sku: str | None = None
+    customer_name: str | None = None
+    po_number: str | None = None
+    origin: str | None = None
+    destination: str | None = None
+    status: str | None = None
+    eta: str | None = None
+    origin_lat: float | None = None
+    origin_lng: float | None = None
+    destination_lat: float | None = None
+    destination_lng: float | None = None
 
 
 class ToolInvocation(BaseModel):

@@ -13,12 +13,15 @@ from backend.api._pagination import apply_cursor
 from backend.api.deps import SessionDep
 from backend.db.models import (
     AffectedShipment,
+    Customer,
     Disruption,
     DraftCommunication,
     ImpactReport,
     MitigationOption,
     Port,
+    PurchaseOrder,
     Shipment,
+    Sku,
     Supplier,
 )
 from backend.schemas import (
@@ -258,19 +261,59 @@ async def get_disruption_impact(
             detail=f"No impact report found for disruption {disruption_id}",
         )
 
-    # Fetch affected shipments for this report
-    as_stmt = select(AffectedShipment).where(AffectedShipment.impact_report_id == report.id)
-    as_result = await session.execute(as_stmt)
-    shipment_rows = as_result.scalars().all()
-
-    shipments = [
-        AffectedShipmentEntry(
-            shipment_id=s.shipment_id,
-            exposure=s.exposure,
-            days_to_sla_breach=s.days_to_sla_breach,
+    # Fetch affected shipments for this report, enriched with shipment /
+    # purchase-order / customer / SKU / origin+destination port info so the
+    # detail table can render real labels instead of empty columns.
+    origin_port = aliased(Port)
+    dest_port = aliased(Port)
+    as_stmt = (
+        select(
+            AffectedShipment.shipment_id,
+            AffectedShipment.exposure,
+            AffectedShipment.days_to_sla_breach,
+            Shipment.status,
+            Shipment.eta,
+            PurchaseOrder.id.label("po_id"),
+            PurchaseOrder.customer_id,
+            Customer.name.label("customer_name"),
+            Sku.description.label("sku_description"),
+            origin_port.name.label("origin_name"),
+            origin_port.lat.label("origin_lat"),
+            origin_port.lng.label("origin_lng"),
+            dest_port.name.label("destination_name"),
+            dest_port.lat.label("destination_lat"),
+            dest_port.lng.label("destination_lng"),
         )
-        for s in shipment_rows
-    ]
+        .select_from(AffectedShipment)
+        .outerjoin(Shipment, Shipment.id == AffectedShipment.shipment_id)
+        .outerjoin(PurchaseOrder, PurchaseOrder.id == Shipment.po_id)
+        .outerjoin(Customer, Customer.id == PurchaseOrder.customer_id)
+        .outerjoin(Sku, Sku.id == PurchaseOrder.sku_id)
+        .outerjoin(origin_port, origin_port.id == Shipment.origin_port_id)
+        .outerjoin(dest_port, dest_port.id == Shipment.dest_port_id)
+        .where(AffectedShipment.impact_report_id == report.id)
+    )
+    as_result = await session.execute(as_stmt)
+    shipments: list[AffectedShipmentEntry] = []
+    for r in as_result.all():
+        shipments.append(
+            AffectedShipmentEntry(
+                shipment_id=r.shipment_id,
+                exposure=r.exposure,
+                days_to_sla_breach=r.days_to_sla_breach,
+                sku=r.sku_description,
+                customer_name=r.customer_name,
+                po_number=r.po_id,
+                origin=r.origin_name,
+                destination=r.destination_name,
+                status=r.status,
+                eta=r.eta.isoformat() if r.eta is not None else None,
+                origin_lat=float(r.origin_lat) if r.origin_lat is not None else None,
+                origin_lng=float(r.origin_lng) if r.origin_lng is not None else None,
+                destination_lat=float(r.destination_lat) if r.destination_lat is not None else None,
+                destination_lng=float(r.destination_lng) if r.destination_lng is not None else None,
+            )
+        )
 
     base = ImpactReportRecord.model_validate(report)
     return ImpactReportWithShipments(

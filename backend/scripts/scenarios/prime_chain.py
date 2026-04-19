@@ -19,6 +19,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal
 
+from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,7 +39,6 @@ async def seed_prime_chain(s: AsyncSession, scenario: Scenario) -> None:
     """Insert the prime-chain rows for ``scenario``. Idempotent."""
     sid = scenario.id
     port_id = f"PORT-PRIME-{sid[:6].upper()}"
-    dest_port_id = f"PORT-PRIME-{sid[:4].upper()}-DEST"
     supplier_id = f"SUP-PRIME-{sid[:6].upper()}"
     sku_id = f"SKU-PRIME-{sid[:6].upper()}"
     customer_id = f"CUST-PRIME-{sid[:6].upper()}"
@@ -46,9 +46,14 @@ async def seed_prime_chain(s: AsyncSession, scenario: Scenario) -> None:
     shipment_ids = [f"SHP-PRIME-{sid[:4].upper()}-{i}" for i in range(1, 4)]
     today = date(2026, 4, 18)
 
-    dest_name, dest_lat, dest_lng = SCENARIO_DESTINATIONS.get(
-        sid, (f"Prime-{sid}-dest", scenario.disruption.lat, scenario.disruption.lng)
-    )
+    # Each shipment gets its own destination port so the three lanes render
+    # as three distinct arcs on the globe instead of stacking into one.
+    n_ships = len(shipment_ids)
+    fallback = (f"Prime-{sid}-dest", scenario.disruption.lat, scenario.disruption.lng)
+    dests = list(SCENARIO_DESTINATIONS.get(sid, [fallback] * n_ships))
+    while len(dests) < n_ships:
+        dests.append(fallback)
+    dest_port_ids = [f"PORT-PRIME-{sid[:4].upper()}-DEST-{i + 1}" for i in range(n_ships)]
 
     await s.execute(
         pg_insert(Port)
@@ -62,9 +67,8 @@ async def seed_prime_chain(s: AsyncSession, scenario: Scenario) -> None:
         )
         .on_conflict_do_nothing()
     )
-    await s.execute(
-        pg_insert(Port)
-        .values(
+    for (dest_name, dest_lat, dest_lng), dest_port_id in zip(dests, dest_port_ids, strict=True):
+        stmt = pg_insert(Port).values(
             id=dest_port_id,
             name=dest_name,
             country="XX",
@@ -72,8 +76,19 @@ async def seed_prime_chain(s: AsyncSession, scenario: Scenario) -> None:
             lng=Decimal(str(dest_lng)),
             modes=["sea"],
         )
-        .on_conflict_do_nothing()
-    )
+        # Upsert name/lat/lng so that tweaking SCENARIO_DESTINATIONS rewrites
+        # the existing Port rows instead of leaving stale coordinates from an
+        # earlier seed run.
+        await s.execute(
+            stmt.on_conflict_do_update(
+                index_elements=[Port.id],
+                set_={
+                    "name": stmt.excluded.name,
+                    "lat": stmt.excluded.lat,
+                    "lng": stmt.excluded.lng,
+                },
+            )
+        )
     await s.execute(
         pg_insert(Supplier)
         .values(
@@ -135,11 +150,19 @@ async def seed_prime_chain(s: AsyncSession, scenario: Scenario) -> None:
                 po_id=po_ids[i],
                 supplier_id=supplier_id,
                 origin_port_id=port_id,
-                dest_port_id=dest_port_id,
+                dest_port_id=dest_port_ids[i],
                 status="in_transit",
                 mode="sea",
                 eta=today + timedelta(days=14 + i * 7),
                 value=Decimal(str(150000 * (i + 1))),
             )
             .on_conflict_do_nothing()
+        )
+        # Backfill legacy rows whose dest_port_id still points at the old
+        # single-dest port ("...-DEST" without an index suffix). Harmless on
+        # fresh installs because the UPDATE matches zero rows.
+        await s.execute(
+            update(Shipment)
+            .where(Shipment.id == ship_id, Shipment.dest_port_id != dest_port_ids[i])
+            .values(dest_port_id=dest_port_ids[i])
         )

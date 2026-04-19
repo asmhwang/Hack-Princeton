@@ -30,25 +30,28 @@ function arcAltitudeFor(d: GlobeRoute): number {
 // ─── Path rendering (surface-hugging ocean / rail / truck + alternatives) ──
 // Ocean routes follow real shipping lanes via searoute; rail/truck follow a
 // sampled great-circle at surface altitude. Alternative bypass lanes stay on
-// the existing waypoint polylines, lifted slightly so they read as
+// the existing waypoint polylines, lifted slightly so they read as an
 // "aspirational" layer rather than live traffic.
+//
+// three-globe's PathsLayer exposes per-point accessors but no per-path context
+// in pathPointAlt, so altitude is baked into each point as [lat, lng, alt].
+type Pt3 = [number, number, number]; // [lat, lng, altitude-fraction]
 type GlobePath = {
   kind: "route" | "alternative";
-  id: string;                       // route.id or alternative.id
+  id: string;                        // route.id or alternative.id
   mode: RouteMode;
-  status: RouteStatus;               // alternatives inherit their parent's status slot
-  points: LatLng[];                  // [lat, lng] polyline
-  altitude: number;
-  route?: GlobeRoute;                // populated for kind === "route" (for click → detail)
+  status: RouteStatus;                // alternatives inherit a placeholder status slot
+  points: Pt3[];
+  route?: GlobeRoute;                 // populated for kind === "route" (for click → detail)
 };
 
 const SURFACE_ALTITUDE = 0.005;      // just above the mesh to avoid z-fighting
 const ALTERNATIVE_ALTITUDE = 0.04;   // lifts bypass routes so they're legible over ocean paths
 
 const pathPointsAccessor = (d: GlobePath) => d.points;
-const pathPointLat = (p: LatLng) => p[0];
-const pathPointLng = (p: LatLng) => p[1];
-const pathPointAltAccessor = (_p: LatLng, _i: number, path: GlobePath) => path.altitude;
+const pathPointLat = (p: Pt3) => p[0];
+const pathPointLng = (p: Pt3) => p[1];
+const pathPointAltAccessor = (p: Pt3) => p[2];
 
 const STATUS_PATH_COLOR: Record<RouteStatus, string> = {
   blocked: "rgba(229,72,77,0.95)",
@@ -545,8 +548,9 @@ export function InteractiveGlobePanel({ routes, stormCenter, disruptionTitle }: 
         id: r.id,
         mode: r.mode,
         status: r.status,
-        points: surfacePathFor(r),
-        altitude: SURFACE_ALTITUDE,
+        points: surfacePathFor(r).map(
+          ([lat, lng]) => [lat, lng, SURFACE_ALTITUDE] as Pt3,
+        ),
         route: r,
       })),
     [surfaceRoutes],
@@ -565,8 +569,9 @@ export function InteractiveGlobePanel({ routes, stormCenter, disruptionTitle }: 
       id: a.id,
       mode: a.mode,
       status: "watch" as const, // color comes from ALTERNATIVE_MODE_COLOR, status is a placeholder
-      points: a.waypoints,
-      altitude: ALTERNATIVE_ALTITUDE,
+      points: a.waypoints.map(
+        ([lat, lng]) => [lat, lng, ALTERNATIVE_ALTITUDE] as Pt3,
+      ),
     }));
     // Deps are the IDs, not the objects — referential stability is the whole
     // point here. The alternatives array per route is immutable.

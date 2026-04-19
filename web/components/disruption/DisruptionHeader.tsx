@@ -1,6 +1,9 @@
+"use client";
+
 import type { Disruption, ImpactReport } from "@/types/schemas";
 import { categoryTokens } from "@/lib/design-tokens";
 import { eventTime, formatCurrency, formatRelativeTime } from "@/lib/format";
+import { useClock } from "@/hooks/useClock";
 
 function severityColor(s: number): string {
   if (s >= 4) return "var(--color-critical)";
@@ -54,6 +57,7 @@ type DisruptionHeaderProps = Readonly<{
 }>;
 
 export function DisruptionHeader({ disruption, impact }: DisruptionHeaderProps) {
+  useClock();
   const token = categoryTokens[disruption.category];
   const detectedAt = eventTime(disruption.detected_at ?? disruption.first_seen_at);
   const exposure = impact?.total_exposure ?? disruption.total_exposure;

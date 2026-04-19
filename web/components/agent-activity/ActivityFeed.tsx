@@ -3,7 +3,8 @@
 import { useMemo } from "react";
 import { motion, AnimatePresence, LayoutGroup } from "motion/react";
 import { useActivityFeed } from "@/hooks/useDisruptions";
-import { formatRelativeTime } from "@/lib/format";
+import { eventTime, formatRelativeTime } from "@/lib/format";
+import { useClock } from "@/hooks/useClock";
 import { useWarRoomStore } from "@/lib/store";
 import type { ActivityItem } from "@/types/schemas";
 
@@ -81,7 +82,7 @@ function ActivityItemRow({ item, isLast }: Readonly<{ item: ActivityItem; isLast
             {item.agent}
           </span>
           <span className="tnum" style={{ fontSize: 10, color: "var(--color-text-subtle)", fontFamily: "var(--font-mono)" }}>
-            {formatRelativeTime(item.created_at)}
+            {formatRelativeTime(eventTime(item.created_at))}
           </span>
         </div>
         <p style={{ margin: 0, fontSize: 12, lineHeight: "18px", color: "var(--color-text-muted)" }}>
@@ -99,6 +100,7 @@ const EMPTY_ITEMS: ActivityItem[] = [
 ];
 
 export function ActivityFeed() {
+  useClock();
   const { data = [] } = useActivityFeed();
   const localActivity = useWarRoomStore((s) => s.activityFeed);
   const items = useMemo(

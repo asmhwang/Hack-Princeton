@@ -5,50 +5,64 @@ import dynamic from "next/dynamic";
 import type { ComponentType } from "react";
 import * as THREE from "three";
 import { AnimatePresence, motion } from "motion/react";
-import type { AlternativeRoute, GlobeRoute, RouteMode } from "@/components/globe/routes";
+import type { AlternativeRoute, GlobeRoute, RouteMode, RouteStatus } from "@/components/globe/routes";
 import { arcColorForRoute } from "@/components/globe/routes";
+import { surfacePathFor, type LatLng } from "@/components/globe/realisticPath";
 import { formatCurrency } from "@/lib/format";
 import { useWarRoomStore } from "@/lib/store";
 
-// Per-mode base arc altitude. Rail/truck hug the surface; ocean rides low; air
-// arches high. This base is the *minimum* lift — arcAltitudeFor() scales it up
-// with angular distance so long spans (>60°) clear the globe convincingly
-// instead of looking like they dip through it.
-const MODE_ALTITUDE: Record<RouteMode, number> = {
-  rail:  0.02,
-  truck: 0.02,
-  ocean: 0.14,
-  air:   0.22,
-};
+// Air routes arch above the globe; rail/truck/ocean render on the surface as
+// paths (see GlobePath / pathsData below). The altitude here is only consulted
+// for arcsData (air).
+const AIR_BASE_ALTITUDE = 0.22;
 
 function arcAltitudeFor(d: GlobeRoute): number {
-  const base = MODE_ALTITUDE[d.mode];
   const from = latLngToUnitVec3(d.from[0], d.from[1]);
   const to = latLngToUnitVec3(d.to[0], d.to[1]);
   const angle = from.angleTo(to); // 0..π
   // Beyond ~60° span, add lift proportional to remaining arc. At antipodes
-  // this tops out around +0.26 on top of the mode base, enough for the arc
-  // midpoint to sit well outside the globe silhouette at any camera angle.
+  // this tops out around +0.26 above the base, enough for the arc midpoint
+  // to sit well outside the globe silhouette at any camera angle.
   const extra = Math.max(0, angle - Math.PI / 3) * 0.22;
-  return base + extra;
+  return AIR_BASE_ALTITUDE + extra;
 }
 
-// Path accessors — hoisted so their identities are stable across re-renders
-// (mousemove causes frequent re-renders; inline fns would trip react-globe.gl
-// into redrawing the paths and resetting the dash animation).
-const pathPoints = (d: AlternativeRoute) => d.waypoints;
-const pathPointLat = (p: [number, number]) => p[0];
-const pathPointLng = (p: [number, number]) => p[1];
-// Raised from 0.005 so the waypoint-to-waypoint spline stays outside the
-// globe mesh on long segments (e.g. Singapore→Cape Town in the Red Sea bypass).
-const pathPointAlt = () => 0.04;
-const PATH_MODE_COLOR: Record<RouteMode, string> = {
+// ─── Path rendering (surface-hugging ocean / rail / truck + alternatives) ──
+// Ocean routes follow real shipping lanes via searoute; rail/truck follow a
+// sampled great-circle at surface altitude. Alternative bypass lanes stay on
+// the existing waypoint polylines, lifted slightly so they read as
+// "aspirational" layer rather than live traffic.
+type GlobePath = {
+  kind: "route" | "alternative";
+  id: string;                       // route.id or alternative.id
+  mode: RouteMode;
+  status: RouteStatus;               // alternatives inherit their parent's status slot
+  points: LatLng[];                  // [lat, lng] polyline
+  altitude: number;
+  route?: GlobeRoute;                // populated for kind === "route" (for click → detail)
+};
+
+const SURFACE_ALTITUDE = 0.005;      // just above the mesh to avoid z-fighting
+const ALTERNATIVE_ALTITUDE = 0.04;   // lifts bypass routes so they're legible over ocean paths
+
+const pathPointsAccessor = (d: GlobePath) => d.points;
+const pathPointLat = (p: LatLng) => p[0];
+const pathPointLng = (p: LatLng) => p[1];
+const pathPointAltAccessor = (_p: LatLng, _i: number, path: GlobePath) => path.altitude;
+
+const STATUS_PATH_COLOR: Record<RouteStatus, string> = {
+  blocked: "rgba(229,72,77,0.95)",
+  watch:   "rgba(217,119,87,0.90)",
+  good:    "rgba(70,167,88,0.85)",
+};
+const ALTERNATIVE_MODE_COLOR: Record<RouteMode, string> = {
   ocean: "rgba(99,179,237,0.85)",
   air:   "rgba(167,139,250,0.85)",
   rail:  "rgba(251,191,36,0.85)",
   truck: "rgba(110,231,183,0.85)",
 };
-const pathColor = (d: AlternativeRoute) => PATH_MODE_COLOR[d.mode];
+const pathColorFor = (d: GlobePath) =>
+  d.kind === "alternative" ? ALTERNATIVE_MODE_COLOR[d.mode] : STATUS_PATH_COLOR[d.status];
 
 // ─── Arc hit layer (invisible thick tubes for easier click/hover) ──
 // Decouples hit-area from visible stroke: we keep `arcStroke` thin for looks
@@ -106,8 +120,17 @@ function greatCircleArcPoints(
   return out;
 }
 
+function surfacePathPoints3D(path: LatLng[], altitude: number): THREE.Vector3[] {
+  // Lift each polyline vertex onto a sphere of radius R*(1 + altitude).
+  const r = GLOBE_RADIUS * (1 + altitude + 0.006);
+  return path.map(([lat, lng]) => latLngToUnitVec3(lat, lng).multiplyScalar(r));
+}
+
 function makeArcHitMesh(route: GlobeRoute): THREE.Mesh {
-  const points = greatCircleArcPoints(route.from, route.to, arcAltitudeFor(route));
+  const points =
+    route.mode === "air"
+      ? greatCircleArcPoints(route.from, route.to, arcAltitudeFor(route))
+      : surfacePathPoints3D(surfacePathFor(route), SURFACE_ALTITUDE);
   const curve = new THREE.CatmullRomCurve3(points);
   const geo = new THREE.TubeGeometry(curve, HIT_TUBE_SEGMENTS, HIT_TUBE_RADIUS, 8, false);
   return new THREE.Mesh(geo, HIT_TUBE_MATERIAL);
@@ -509,18 +532,51 @@ export function InteractiveGlobePanel({ routes, stormCenter, disruptionTitle }: 
     setSelectedRoute((prev) => (prev?.id === d.id ? null : d));
   };
 
+  // Split routes into air (arced above globe) and surface (ocean/rail/truck,
+  // rendered on the globe mesh via pathsData). Ocean lanes follow real
+  // shipping routes through searoute; rail/truck use a sampled great-circle.
+  const airRoutes = useMemo(() => routes.filter((r) => r.mode === "air"), [routes]);
+  const surfaceRoutes = useMemo(() => routes.filter((r) => r.mode !== "air"), [routes]);
+
+  const surfacePaths = useMemo<GlobePath[]>(
+    () =>
+      surfaceRoutes.map((r) => ({
+        kind: "route" as const,
+        id: r.id,
+        mode: r.mode,
+        status: r.status,
+        points: surfacePathFor(r),
+        altitude: SURFACE_ALTITUDE,
+        route: r,
+      })),
+    [surfaceRoutes],
+  );
+
   // Alternatives to show: hovered blocked route wins, else selected blocked route.
   // Memoized against mousemove-driven re-renders — a new array reference makes
   // react-globe.gl think the path data changed and retriggers its transition.
-  const alternativePaths = useMemo<AlternativeRoute[]>(() => {
+  const alternativeGlobePaths = useMemo<GlobePath[]>(() => {
     const blocked = (r: GlobeRoute | null) =>
       r?.status === "blocked" && (r.alternatives?.length ?? 0) > 0 ? r : null;
     const source = blocked(hoveredArc) ?? blocked(selectedRoute);
-    return source?.alternatives ?? [];
+    const alts: AlternativeRoute[] = source?.alternatives ?? [];
+    return alts.map((a) => ({
+      kind: "alternative" as const,
+      id: a.id,
+      mode: a.mode,
+      status: "watch" as const, // color comes from ALTERNATIVE_MODE_COLOR, status is a placeholder
+      points: a.waypoints,
+      altitude: ALTERNATIVE_ALTITUDE,
+    }));
     // Deps are the IDs, not the objects — referential stability is the whole
     // point here. The alternatives array per route is immutable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hoveredArc?.id, selectedRoute?.id]);
+
+  const globePaths = useMemo<GlobePath[]>(
+    () => [...surfacePaths, ...alternativeGlobePaths],
+    [surfacePaths, alternativeGlobePaths],
+  );
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -589,8 +645,8 @@ export function InteractiveGlobePanel({ routes, stormCenter, disruptionTitle }: 
           }
         }}
 
-        // ── Arcs ──────────────────────────────────────────────────
-        arcsData={routes}
+        // ── Air arcs (the only mode that arches above the surface) ───
+        arcsData={airRoutes}
         arcStartLat={(d: GlobeRoute) => d.from[0]}
         arcStartLng={(d: GlobeRoute) => d.from[1]}
         arcEndLat={(d: GlobeRoute) => d.to[0]}
@@ -609,31 +665,51 @@ export function InteractiveGlobePanel({ routes, stormCenter, disruptionTitle }: 
         arcDashGap={(d: GlobeRoute) => d.status === "blocked" ? 0.08 : 0.4}
         arcDashAnimateTime={(d: GlobeRoute) => d.status === "blocked" ? 1400 : 2800}
         arcAltitude={arcAltitudeFor}
-        // Keep arc hover/click handlers as a fallback — they still fire on
-        // direct hits against the thin visible mesh, while the custom hit-
-        // layer below widens the hit area everywhere else.
         onArcClick={handleArcClick}
         onArcHover={(d: GlobeRoute | null) => setHoveredArc(d ?? null)}
 
-        // ── Invisible hit layer (fat transparent tubes along each arc's great circle) ─
+        // ── Invisible hit layer (fat transparent tubes along each route's
+        // real path — great-circle arc for air, searoute for ocean,
+        // great-circle at surface for rail/truck). ────────────────────
         customLayerData={routes}
         customThreeObject={(d: GlobeRoute) => makeArcHitMesh(d)}
         customThreeObjectUpdate={() => { /* static geometry */ }}
         onCustomLayerClick={handleArcClick}
         onCustomLayerHover={(d: GlobeRoute | null) => setHoveredArc(d ?? null)}
 
-        // ── Alternative paths (appear on hover/select of blocked routes) ─
-        pathsData={alternativePaths}
-        pathPoints={pathPoints}
+        // ── Surface paths (ocean via real shipping lanes, rail/truck on
+        // land) + alternative bypass routes. Both share the pathsData layer
+        // since react-globe.gl supports one paths layer at a time. ──────
+        pathsData={globePaths}
+        pathPoints={pathPointsAccessor}
         pathPointLat={pathPointLat}
         pathPointLng={pathPointLng}
-        pathPointAlt={pathPointAlt}
-        pathColor={pathColor}
-        pathStroke={0.6}
-        pathDashLength={0.35}
-        pathDashGap={0.18}
-        pathDashAnimateTime={2200}
+        pathPointAlt={pathPointAltAccessor}
+        pathColor={pathColorFor}
+        pathStroke={(d: GlobePath) => {
+          if (d.kind === "alternative") return 0.6;
+          if (d.route && d.route.id === selectedRoute?.id) return 1.4;
+          if (d.route && d.route.id === hoveredArc?.id) return 1.0;
+          if (d.status === "blocked") return 0.6;
+          return 0.35;
+        }}
+        pathDashLength={(d: GlobePath) =>
+          d.kind === "alternative" ? 0.35 : d.status === "blocked" ? 0.25 : 0.7
+        }
+        pathDashGap={(d: GlobePath) =>
+          d.kind === "alternative" ? 0.18 : d.status === "blocked" ? 0.08 : 0.4
+        }
+        pathDashAnimateTime={(d: GlobePath) =>
+          d.kind === "alternative" ? 2200 : d.status === "blocked" ? 1400 : 2800
+        }
         pathTransitionDuration={0}
+        onPathClick={(d: GlobePath) => {
+          if (d.kind === "route" && d.route) handleArcClick(d.route);
+        }}
+        onPathHover={(d: GlobePath | null) => {
+          if (!d || d.kind !== "route") return setHoveredArc(null);
+          setHoveredArc(d.route ?? null);
+        }}
 
         // ── City dots ─────────────────────────────────────────────
         pointsData={allPoints}

@@ -8,7 +8,7 @@ import { useWarRoomStore } from "@/lib/store";
 import { DisruptionCard } from "@/components/disruption/DisruptionCard";
 
 const spring = { type: "spring" as const, stiffness: 260, damping: 26 };
-const FILTERS = ["active", "monitoring", "resolved"] as const;
+const FILTERS = ["active", "resolved"] as const;
 type Filter = (typeof FILTERS)[number];
 
 function DisruptionListSkeleton() {

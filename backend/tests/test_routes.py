@@ -304,7 +304,7 @@ async def test_activity_feed_returns_inserted_entry():
         await s.execute(
             text(
                 "INSERT INTO agent_log (agent_name, trace_id, event_type, payload, ts) "
-                "VALUES ('scout', :tid, 'signal_emitted', '{}'::jsonb, NOW())"
+                "VALUES ('scout', :tid, 'signal_classified', '{}'::jsonb, NOW())"
             ),
             {"tid": uuid.uuid4()},
         )
@@ -313,8 +313,58 @@ async def test_activity_feed_returns_inserted_entry():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         r = await c.get("/api/activity/feed")
     assert r.status_code == 200
-    assert len(r.json()) == 1
-    assert r.json()[0]["agent_name"] == "scout"
+    body = r.json()
+    assert len(body) == 1
+    entry = body[0]
+    # Contract keys must match web/types/schemas.ts::activityItemSchema exactly.
+    assert set(entry.keys()) == {"id", "agent", "message", "created_at", "severity"}
+    assert entry["id"].startswith("log-")
+    assert entry["agent"] == "Scout"  # normalized from lowercase 'scout'
+    assert entry["message"] == "Classified source signal"
+    assert entry["severity"] == "info"
+
+
+async def test_activity_feed_maps_impact_report_written():
+    """Known event_type with payload → derived message includes exposure; severity=warning."""
+    async with session() as s:
+        await s.execute(
+            text(
+                "INSERT INTO agent_log (agent_name, trace_id, event_type, payload, ts) "
+                "VALUES ('Analyst', :tid, 'impact_report_written', "
+                '\'{"total_exposure": "1250000"}\'::jsonb, NOW())'
+            ),
+            {"tid": uuid.uuid4()},
+        )
+        await s.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.get("/api/activity/feed")
+    assert r.status_code == 200
+    entry = r.json()[0]
+    assert entry["agent"] == "Analyst"
+    assert entry["severity"] == "warning"
+    assert "1250000" in entry["message"]
+
+
+async def test_activity_feed_unknown_agent_falls_back_to_system():
+    """Agent names outside Scout/Analyst/Strategist collapse to 'System'."""
+    async with session() as s:
+        await s.execute(
+            text(
+                "INSERT INTO agent_log (agent_name, trace_id, event_type, payload, ts) "
+                "VALUES ('orchestrator', :tid, 'some_custom_event', '{}'::jsonb, NOW())"
+            ),
+            {"tid": uuid.uuid4()},
+        )
+        await s.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.get("/api/activity/feed")
+    assert r.status_code == 200
+    entry = r.json()[0]
+    assert entry["agent"] == "System"
+    # Unknown event_type humanizes underscores to spaces.
+    assert entry["message"] == "some custom event"
 
 
 # ---------------------------------------------------------------------------

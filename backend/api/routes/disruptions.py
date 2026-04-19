@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Annotated, cast
 
 from fastapi import APIRouter, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import aliased
 
 from backend.api._pagination import apply_cursor
@@ -51,8 +51,51 @@ async def list_disruptions(
         Query(ge=1, le=200, description="Max rows to return (1-200)"),
     ] = 50,
 ) -> list[DisruptionRecord]:
-    """List disruptions sorted by last_seen_at DESC with optional cursor pagination."""
-    stmt = select(Disruption).order_by(Disruption.last_seen_at.desc())
+    """List disruptions sorted by last_seen_at DESC with optional cursor pagination.
+
+    Enriches each row with ``total_exposure`` (sum of affected_shipments.exposure
+    on the most-recent impact report) and ``affected_shipments_count``. The UI
+    list views render $0 / 0 without this — the top-bar summary uses a separate
+    aggregate so it's correct either way, but per-row numbers need the join.
+    """
+    # Subquery: one impact_report row per disruption (the most recent).
+    latest_impact = select(
+        ImpactReport.id.label("impact_id"),
+        ImpactReport.disruption_id.label("disruption_id"),
+        func.row_number()
+        .over(
+            partition_by=ImpactReport.disruption_id,
+            order_by=ImpactReport.generated_at.desc(),
+        )
+        .label("rn"),
+    ).subquery()
+
+    agg = (
+        select(
+            latest_impact.c.disruption_id.label("disruption_id"),
+            func.sum(AffectedShipment.exposure).label("total_exposure"),
+            func.count(AffectedShipment.shipment_id).label("shipment_count"),
+        )
+        .select_from(latest_impact)
+        .join(
+            AffectedShipment,
+            AffectedShipment.impact_report_id == latest_impact.c.impact_id,
+        )
+        .where(latest_impact.c.rn == 1)
+        .group_by(latest_impact.c.disruption_id)
+        .subquery()
+    )
+
+    stmt = (
+        select(
+            Disruption,
+            agg.c.total_exposure,
+            agg.c.shipment_count,
+        )
+        .select_from(Disruption)
+        .outerjoin(agg, agg.c.disruption_id == Disruption.id)
+        .order_by(Disruption.last_seen_at.desc())
+    )
 
     if status is not None:
         stmt = stmt.where(Disruption.status == status)
@@ -60,8 +103,17 @@ async def list_disruptions(
     stmt = apply_cursor(stmt, before_col=Disruption.last_seen_at, before=before, limit=limit)
 
     result = await session.execute(stmt)
-    rows = result.scalars().all()
-    return [DisruptionRecord.model_validate(r) for r in rows]
+    out: list[DisruptionRecord] = []
+    for row in result.all():
+        rec = DisruptionRecord.model_validate(row[0])
+        rec = rec.model_copy(
+            update={
+                "total_exposure": (Decimal(str(row[1])) if row[1] is not None else Decimal("0")),
+                "affected_shipments_count": int(row[2]) if row[2] is not None else 0,
+            }
+        )
+        out.append(rec)
+    return out
 
 
 _SEV_BLOCKED = 4

@@ -15,6 +15,7 @@ from backend.db.models import (
     ImpactReport,
     PurchaseOrder,
     Shipment,
+    Sku,
 )
 from backend.schemas.analytics import (
     AnalyticsPoint,
@@ -77,14 +78,15 @@ async def get_exposure_breakdown(session: SessionDep) -> AnalyticsSummary:
         .order_by(cust_label)
     )
 
-    # by_sku
-    sku_label = PurchaseOrder.sku_id.label("label")
+    # by_sku — label by human-readable description, falling back to sku_id
+    sku_label = func.coalesce(Sku.description, PurchaseOrder.sku_id).label("label")
     sku_stmt = (
         select(sku_label, exposure_sum, ship_count)
         .select_from(ImpactReport)
         .join(AffectedShipment, AffectedShipment.impact_report_id == ImpactReport.id)
         .join(Shipment, Shipment.id == AffectedShipment.shipment_id)
         .join(PurchaseOrder, PurchaseOrder.id == Shipment.po_id)
+        .outerjoin(Sku, Sku.id == PurchaseOrder.sku_id)
         .group_by(sku_label)
         .order_by(sku_label)
     )

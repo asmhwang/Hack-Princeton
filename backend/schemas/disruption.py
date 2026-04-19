@@ -45,3 +45,7 @@ class DisruptionRecord(BaseModel):
     first_seen_at: datetime
     last_seen_at: datetime
     status: DisruptionStatus
+    # Populated by list_disruptions via a JOIN with impact_reports / affected_shipments.
+    # Single-row endpoints leave these as None; the UI tolerates that.
+    total_exposure: Decimal | None = None
+    affected_shipments_count: int | None = None

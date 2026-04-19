@@ -160,6 +160,8 @@ export const analyticsPointSchema = z
   .object({
     label: z.string(),
     exposure: decimalString,
+    at_risk: decimalString.default("0"),
+    mitigated: decimalString.default("0"),
     count: z.number().int().nonnegative().optional().default(0),
   })
   .strict();

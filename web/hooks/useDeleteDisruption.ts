@@ -21,7 +21,7 @@ export function useDeleteDisruption() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.impact(id) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.mitigations(id) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.exposure });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.analytics });
+      void queryClient.invalidateQueries({ queryKey: ["analytics"] });
       void queryClient.invalidateQueries({ queryKey: queryKeys.activity });
     },
   });

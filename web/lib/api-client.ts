@@ -205,12 +205,12 @@ export const apiClient = {
     });
   },
 
-  getAnalytics(): Promise<AnalyticsSummary> {
-    return request("/api/analytics/exposure/breakdown", analyticsSummarySchema, {
-      by_customer: [],
-      by_sku: [],
-      by_quarter: [],
-    });
+  getAnalytics(range: string = "7d"): Promise<AnalyticsSummary> {
+    return request(
+      `/api/analytics/exposure/breakdown?range=${encodeURIComponent(range)}`,
+      analyticsSummarySchema,
+      { by_customer: [], by_sku: [], by_quarter: [] },
+    );
   },
 
   async deleteDisruption(disruptionId: string): Promise<void> {

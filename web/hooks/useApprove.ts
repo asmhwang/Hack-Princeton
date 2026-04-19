@@ -12,7 +12,7 @@ export function useApprove(disruptionId: string | null) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.exposure });
       void queryClient.invalidateQueries({ queryKey: queryKeys.activity });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.analytics });
+      void queryClient.invalidateQueries({ queryKey: ["analytics"] });
       // Prefix-match: invalidates every disruptions(status) list and activeRoutes
       void queryClient.invalidateQueries({ queryKey: ["disruptions"] });
       if (disruptionId) {

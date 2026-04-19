@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Query
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import aliased
 
 from backend.api.deps import SessionDep
@@ -27,6 +28,21 @@ from backend.schemas.analytics import (
 router = APIRouter()
 
 GroupBy = Literal["quarter", "customer", "sku"]
+TimeRange = Literal["24h", "7d", "30d", "QTD"]
+
+
+def _range_cutoff(range_: TimeRange) -> datetime:
+    """Return the inclusive lower bound for ImpactReport.generated_at."""
+    now = datetime.now(UTC).replace(tzinfo=None)
+    if range_ == "24h":
+        return now - timedelta(hours=24)
+    if range_ == "7d":
+        return now - timedelta(days=7)
+    if range_ == "30d":
+        return now - timedelta(days=30)
+    # QTD: start of current calendar quarter
+    quarter_start_month = ((now.month - 1) // 3) * 3 + 1
+    return datetime(now.year, quarter_start_month, 1)
 
 
 @router.get("/exposure/summary")
@@ -55,25 +71,38 @@ async def get_exposure_summary(session: SessionDep) -> ExposureSummary:
 
 
 @router.get("/exposure/breakdown")
-async def get_exposure_breakdown(session: SessionDep) -> AnalyticsSummary:
+async def get_exposure_breakdown(
+    session: SessionDep,
+    range: Annotated[TimeRange, Query(description="Time window")] = "7d",
+) -> AnalyticsSummary:
     """Return exposure grouped three ways (customer / sku / quarter) in one shot.
 
-    Used by the Analytics screen so it can render three charts from a single
-    fetch instead of three separate ones.
+    Filtered to impact reports whose ``generated_at`` falls within the requested
+    time window so the Analytics screen's 24h / 7d / 30d / QTD tabs produce
+    different aggregates.
     """
+    cutoff = _range_cutoff(range)
     exposure_sum = func.sum(AffectedShipment.exposure).label("exposure")
+    at_risk_sum = func.sum(
+        case((Disruption.status != "resolved", AffectedShipment.exposure), else_=0)
+    ).label("at_risk")
+    mitigated_sum = func.sum(
+        case((Disruption.status == "resolved", AffectedShipment.exposure), else_=0)
+    ).label("mitigated")
     ship_count = func.count(func.distinct(AffectedShipment.shipment_id)).label("count")
 
     # by_customer
     cust_alias = aliased(Customer)
     cust_label = func.coalesce(cust_alias.name, PurchaseOrder.customer_id).label("label")
     cust_stmt = (
-        select(cust_label, exposure_sum, ship_count)
+        select(cust_label, exposure_sum, at_risk_sum, mitigated_sum, ship_count)
         .select_from(ImpactReport)
+        .join(Disruption, Disruption.id == ImpactReport.disruption_id)
         .join(AffectedShipment, AffectedShipment.impact_report_id == ImpactReport.id)
         .join(Shipment, Shipment.id == AffectedShipment.shipment_id)
         .join(PurchaseOrder, PurchaseOrder.id == Shipment.po_id)
         .outerjoin(cust_alias, cust_alias.id == PurchaseOrder.customer_id)
+        .where(ImpactReport.generated_at >= cutoff)
         .group_by(cust_label)
         .order_by(cust_label)
     )
@@ -81,12 +110,14 @@ async def get_exposure_breakdown(session: SessionDep) -> AnalyticsSummary:
     # by_sku — label by human-readable description, falling back to sku_id
     sku_label = func.coalesce(Sku.description, PurchaseOrder.sku_id).label("label")
     sku_stmt = (
-        select(sku_label, exposure_sum, ship_count)
+        select(sku_label, exposure_sum, at_risk_sum, mitigated_sum, ship_count)
         .select_from(ImpactReport)
+        .join(Disruption, Disruption.id == ImpactReport.disruption_id)
         .join(AffectedShipment, AffectedShipment.impact_report_id == ImpactReport.id)
         .join(Shipment, Shipment.id == AffectedShipment.shipment_id)
         .join(PurchaseOrder, PurchaseOrder.id == Shipment.po_id)
         .outerjoin(Sku, Sku.id == PurchaseOrder.sku_id)
+        .where(ImpactReport.generated_at >= cutoff)
         .group_by(sku_label)
         .order_by(sku_label)
     )
@@ -94,11 +125,13 @@ async def get_exposure_breakdown(session: SessionDep) -> AnalyticsSummary:
     # by_quarter
     quarter_label = func.to_char(Shipment.eta, 'YYYY-"Q"Q').label("label")
     quarter_stmt = (
-        select(quarter_label, exposure_sum, ship_count)
+        select(quarter_label, exposure_sum, at_risk_sum, mitigated_sum, ship_count)
         .select_from(ImpactReport)
+        .join(Disruption, Disruption.id == ImpactReport.disruption_id)
         .join(AffectedShipment, AffectedShipment.impact_report_id == ImpactReport.id)
         .join(Shipment, Shipment.id == AffectedShipment.shipment_id)
         .join(PurchaseOrder, PurchaseOrder.id == Shipment.po_id)
+        .where(ImpactReport.generated_at >= cutoff)
         .group_by(quarter_label)
         .order_by(quarter_label)
     )
@@ -108,6 +141,8 @@ async def get_exposure_breakdown(session: SessionDep) -> AnalyticsSummary:
             AnalyticsPoint(
                 label=str(r.label) if r.label is not None else "unknown",
                 exposure=Decimal(str(r.exposure)) if r.exposure is not None else Decimal("0"),
+                at_risk=Decimal(str(r.at_risk)) if r.at_risk is not None else Decimal("0"),
+                mitigated=Decimal(str(r.mitigated)) if r.mitigated is not None else Decimal("0"),
                 count=int(r.count) if r.count is not None else 0,
             )
             for r in rows

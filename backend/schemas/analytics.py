@@ -35,12 +35,19 @@ class ExposureSummary(BaseModel):
 
 
 class AnalyticsPoint(BaseModel):
-    """One row in an analytics breakdown (smaller shape than ExposureBucket)."""
+    """One row in an analytics breakdown (smaller shape than ExposureBucket).
+
+    ``at_risk`` + ``mitigated`` split ``exposure`` by disruption status so the
+    chart can stack the two. Approving a mitigation flips its disruption to
+    ``resolved`` and moves its contribution from at_risk → mitigated.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     label: str
     exposure: Decimal
+    at_risk: Decimal
+    mitigated: Decimal
     count: int
 
 

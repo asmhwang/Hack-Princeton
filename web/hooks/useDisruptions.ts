@@ -50,9 +50,9 @@ export function useActivityFeed() {
   });
 }
 
-export function useAnalytics() {
+export function useAnalytics(range: string = "7d") {
   return useQuery({
-    queryKey: queryKeys.analytics,
-    queryFn: () => apiClient.getAnalytics(),
+    queryKey: queryKeys.analytics(range),
+    queryFn: () => apiClient.getAnalytics(range),
   });
 }

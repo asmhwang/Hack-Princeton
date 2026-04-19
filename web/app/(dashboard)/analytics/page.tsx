@@ -12,7 +12,7 @@ function toCsv(rows: { label: string; exposure: string; count?: number }[]) {
 
 export default function AnalyticsPage() {
   const [range, setRange] = useState("7d");
-  const { data } = useAnalytics();
+  const { data } = useAnalytics(range);
   const analytics = data ?? { by_customer: [], by_sku: [], by_quarter: [] };
 
   function exportCsv() {

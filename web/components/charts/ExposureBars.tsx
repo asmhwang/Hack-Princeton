@@ -6,6 +6,26 @@ import { formatCurrency } from "@/lib/format";
 
 const spring = { type: "spring" as const, stiffness: 260, damping: 26 };
 
+function LegendChip({ color, label }: Readonly<{ color: string; label: string }>) {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        fontSize: 10,
+        fontFamily: "var(--font-mono)",
+        color: "var(--color-text-subtle)",
+        textTransform: "uppercase",
+        letterSpacing: "0.06em",
+      }}
+    >
+      <span style={{ width: 8, height: 8, borderRadius: 2, background: color, display: "inline-block" }} />
+      {label}
+    </span>
+  );
+}
+
 type ExposureBarsProps = Readonly<{
   title: string;
   data: AnalyticsPoint[];
@@ -35,6 +55,8 @@ export function ExposureBars({ title, data }: ExposureBarsProps) {
   const sorted = [...data].sort((a, b) => Number(b.exposure) - Number(a.exposure));
   const max = Math.max(...sorted.map((d) => Number(d.exposure)));
   const total = sorted.reduce((s, d) => s + Number(d.exposure), 0);
+  const totalAtRisk = sorted.reduce((s, d) => s + Number(d.at_risk ?? 0), 0);
+  const totalMitigated = sorted.reduce((s, d) => s + Number(d.mitigated ?? 0), 0);
 
   return (
     <section
@@ -60,17 +82,10 @@ export function ExposureBars({ title, data }: ExposureBarsProps) {
             Σ {formatCurrency(total)} · n={data.length}
           </span>
         </div>
-        <span
-          style={{
-            fontSize: 10,
-            color: "var(--color-text-subtle)",
-            fontFamily: "var(--font-mono)",
-            textTransform: "uppercase",
-            letterSpacing: "0.06em",
-          }}
-        >
-          sorted by exposure
-        </span>
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <LegendChip color="var(--color-critical)" label={`At risk ${formatCurrency(totalAtRisk)}`} />
+          <LegendChip color="var(--color-ok)" label={`Mitigated ${formatCurrency(totalMitigated)}`} />
+        </div>
       </div>
 
       <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
@@ -102,15 +117,26 @@ export function ExposureBars({ title, data }: ExposureBarsProps) {
                 background: "var(--color-bg)",
                 borderRadius: 2,
                 overflow: "hidden",
+                display: "flex",
               }}
             >
               <motion.div
                 initial={{ width: 0 }}
-                animate={{ width: `${(Number(row.exposure) / max) * 100}%` }}
+                animate={{ width: `${(Number(row.at_risk ?? 0) / max) * 100}%` }}
                 transition={{ ...spring, delay: i * 0.04 }}
                 style={{
                   height: "100%",
-                  background: "linear-gradient(90deg, var(--color-info) 0%, rgba(194,164,109,0.5) 100%)",
+                  background: "var(--color-critical)",
+                }}
+              />
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${(Number(row.mitigated ?? 0) / max) * 100}%` }}
+                transition={{ ...spring, delay: i * 0.04 + 0.05 }}
+                style={{
+                  height: "100%",
+                  background: "var(--color-ok)",
+                  opacity: 0.75,
                 }}
               />
             </div>

@@ -8,5 +8,5 @@ export const queryKeys = {
   drafts: (mitigationId: string) => ["drafts", mitigationId] as const,
   activity: ["activity"] as const,
   exposure: ["analytics", "exposure"] as const,
-  analytics: ["analytics"] as const,
+  analytics: (range = "7d") => ["analytics", range] as const,
 };

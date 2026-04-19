@@ -8,6 +8,8 @@ suppl.ai continuously monitors the world across news, weather, policy, logistics
 
 **Differentiator.** Existing supply-chain visibility tools *show you* what's happening. suppl.ai *acts on it*. The difference between a weather app and an autopilot.
 
+**Live demo:** https://suppl-ai-seven.vercel.app (frontend). Requires the backend to be reachable via a public HTTPS URL set in `NEXT_PUBLIC_API_BASE_URL` — see [Vercel deploy](#vercel-deploy).
+
 ## Architecture
 
 Three coordinated Python agents running as separate Dedalus Machines, communicating only through Postgres (`LISTEN/NOTIFY`). No RPC between agents — swarm discipline.
@@ -144,6 +146,30 @@ docs/
     2026-04-18-plan-C-api-demo.md               # Teammate C ownership
   runbook.md                                    # env setup, blocked deps
 ```
+
+## Vercel deploy
+
+Frontend is deployed from `web/` (project linked via `vercel link`; `web/vercel.json` + `web/.env.example` checked in). Backend has no dedicated API VM in the current infra plan, so the Vercel site needs a public HTTPS URL for the FastAPI backend. For the hackathon demo, we tunnel the local backend with ngrok.
+
+```bash
+# Terminal 1 — FastAPI
+uv run uvicorn backend.api.main:app --port 8000
+
+# Terminal 2 — public tunnel
+brew install ngrok                        # one-time
+ngrok config add-authtoken <authtoken>    # one-time
+ngrok http 8000                           # prints https://<id>.ngrok-free.app
+
+# Terminal 3 — point Vercel at the tunnel
+cd web
+vercel env rm NEXT_PUBLIC_API_BASE_URL production -y   # skip if first time
+vercel env add NEXT_PUBLIC_API_BASE_URL production     # paste https://<id>.ngrok-free.app (no path, no trailing slash)
+vercel --prod
+```
+
+Do NOT set `NEXT_PUBLIC_WS_URL` separately — `web/lib/ws-client.ts` auto-derives `wss://<host>/ws/updates` from the base URL. Setting both double-appends the path.
+
+Free-tier ngrok URLs change on restart; re-run `env rm` + `env add` + `vercel --prod` when the tunnel resets.
 
 ## Commands reference
 
@@ -288,13 +314,13 @@ Scout's primary search layer for 4 of 5 source categories (news, policy, logisti
 
 ## Quality gates (must pass before submission)
 
-- [ ] `uv run ruff check .` + `uv run ruff format --check .` clean
-- [ ] `uv run mypy --strict backend/db backend/schemas backend/llm backend/agents/base.py` clean
-- [ ] `uv run pytest` green (currently 150+ tests)
-- [ ] `grep -r "smtplib\|sendmail\|smtp" backend/` empty
-- [ ] `pnpm -C web lint && pnpm -C web typecheck && pnpm -C web build` green
-- [ ] `pnpm -C web test:e2e` — 5/5 scenarios, 5 consecutive runs
-- [ ] Lighthouse Performance ≥90, Accessibility ≥95 on War Room
+- [x] `uv run ruff check .` + `uv run ruff format --check .` clean
+- [x] `uv run mypy --strict backend/db backend/schemas backend/llm backend/agents/base.py` clean
+- [x] `uv run pytest` green
+- [x] `grep -r "smtplib\|sendmail\|smtp" backend/` empty (only `tests/test_no_smtp.py` guard)
+- [x] `pnpm -C web lint && pnpm -C web typecheck && pnpm -C web build` green
+- [ ] `pnpm -C web test:e2e` — 5/5 scenarios, 5 consecutive runs (only smoke spec shipped; full C.9 suite pending)
+- [ ] Lighthouse Performance ≥90, Accessibility ≥95 on War Room (unrun)
 - [ ] 3× manual dry-run matches pitch script
 
 ## Design system

@@ -38,8 +38,7 @@ LUXSHARE_FIRE = Scenario(
             " Expected downtime 2-3 weeks. Affected SKUs include PMIC and MCU"
             " sub-assemblies for Tier-1 customers."
         ),
-        # DisruptionCategory "industrial" is distinct from SourceCategory "news"
-        category="industrial",
+        category="news",
         severity=4,
         region="Southeast Asia",
         lat=21.27,

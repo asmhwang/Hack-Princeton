@@ -36,7 +36,7 @@ REDSEA_ADVISORY = Scenario(
             " days per voyage. Asia-Europe freight rates up 40%. Impact hits Suez-bound"
             " containers from Indian Ocean and Far East."
         ),
-        category="logistics",
+        category="policy",
         severity=3,
         region="Red Sea / Bab-el-Mandeb",
         lat=12.58,

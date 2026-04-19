@@ -338,13 +338,6 @@ Development workflow:
 3. Write tests first where the plan says strict TDD (SQL guard, event bus, approval atomicity, LLM parsing).
 4. Open PR → green CI → merge → delete branch.
 
-## Credits
-
-- **Product lead + pitch**: Teammate C
-- **Agents & infra (Plan A)**: Teammate A
-- **Frontend & UX (Plan B)**: Teammate B
-- **Implementation planning**: Claude Opus 4.7 (1M context) via Claude Code
-
 ## License
 
 Unlicensed — hackathon submission only.

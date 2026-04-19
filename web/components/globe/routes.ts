@@ -28,6 +28,11 @@ export type GlobeRoute = {
   recommendation: string;
   reason: string;
   alternatives?: AlternativeRoute[];
+  // Set when this route is tied to an active disruption (via the
+  // /api/disruptions/active/routes payload). Clicking such a route on the
+  // globe navigates to the disruption's detail view so the shipments table
+  // surfaces alongside the map.
+  disruption_id?: string;
 };
 
 export const demoRoutes: GlobeRoute[] = [
@@ -270,6 +275,7 @@ export function routesFromShipments(shipments: AffectedShipment[]): GlobeRoute[]
 export function routesFromActiveRoutes(rows: ActiveRoute[]): GlobeRoute[] {
   return rows.map((r): GlobeRoute => ({
     id: r.id,
+    disruption_id: r.disruption_id,
     origin: r.origin_name,
     destination: r.destination_name,
     from: r.from,

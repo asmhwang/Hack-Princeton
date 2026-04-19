@@ -8,11 +8,12 @@ import { AnimatePresence, motion } from "motion/react";
 import type { AlternativeRoute, GlobeRoute, RouteMode } from "@/components/globe/routes";
 import { arcColorForRoute } from "@/components/globe/routes";
 import { formatCurrency } from "@/lib/format";
+import { useWarRoomStore } from "@/lib/store";
 
-// Per-mode arc altitude. Rail/truck hug the surface; ocean rides low; air arches high.
-// Values nudged up from {rail/truck: 0.005, ocean: 0.05} so the tube-segment chords
-// don't dip below the globe mesh on long arcs (esp. Shanghai→Hamburg rail,
-// Shanghai→Rotterdam ocean).
+// Per-mode base arc altitude. Rail/truck hug the surface; ocean rides low; air
+// arches high. This base is the *minimum* lift — arcAltitudeFor() scales it up
+// with angular distance so long spans (>60°) clear the globe convincingly
+// instead of looking like they dip through it.
 const MODE_ALTITUDE: Record<RouteMode, number> = {
   rail:  0.02,
   truck: 0.02,
@@ -20,13 +21,27 @@ const MODE_ALTITUDE: Record<RouteMode, number> = {
   air:   0.22,
 };
 
+function arcAltitudeFor(d: GlobeRoute): number {
+  const base = MODE_ALTITUDE[d.mode];
+  const from = latLngToUnitVec3(d.from[0], d.from[1]);
+  const to = latLngToUnitVec3(d.to[0], d.to[1]);
+  const angle = from.angleTo(to); // 0..π
+  // Beyond ~60° span, add lift proportional to remaining arc. At antipodes
+  // this tops out around +0.26 on top of the mode base, enough for the arc
+  // midpoint to sit well outside the globe silhouette at any camera angle.
+  const extra = Math.max(0, angle - Math.PI / 3) * 0.22;
+  return base + extra;
+}
+
 // Path accessors — hoisted so their identities are stable across re-renders
 // (mousemove causes frequent re-renders; inline fns would trip react-globe.gl
 // into redrawing the paths and resetting the dash animation).
 const pathPoints = (d: AlternativeRoute) => d.waypoints;
 const pathPointLat = (p: [number, number]) => p[0];
 const pathPointLng = (p: [number, number]) => p[1];
-const pathPointAlt = () => 0.005;
+// Raised from 0.005 so the waypoint-to-waypoint spline stays outside the
+// globe mesh on long segments (e.g. Singapore→Cape Town in the Red Sea bypass).
+const pathPointAlt = () => 0.04;
 const PATH_MODE_COLOR: Record<RouteMode, string> = {
   ocean: "rgba(99,179,237,0.85)",
   air:   "rgba(167,139,250,0.85)",
@@ -92,7 +107,7 @@ function greatCircleArcPoints(
 }
 
 function makeArcHitMesh(route: GlobeRoute): THREE.Mesh {
-  const points = greatCircleArcPoints(route.from, route.to, MODE_ALTITUDE[route.mode]);
+  const points = greatCircleArcPoints(route.from, route.to, arcAltitudeFor(route));
   const curve = new THREE.CatmullRomCurve3(points);
   const geo = new THREE.TubeGeometry(curve, HIT_TUBE_SEGMENTS, HIT_TUBE_RADIUS, 8, false);
   return new THREE.Mesh(geo, HIT_TUBE_MATERIAL);
@@ -481,6 +496,18 @@ export function InteractiveGlobePanel({ routes, stormCenter, disruptionTitle }: 
   const [selectedRoute, setSelectedRoute] = useState<GlobeRoute | null>(null);
   const [hoveredArc, setHoveredArc] = useState<GlobeRoute | null>(null);
   const [hoveredPoint, setHoveredPoint] = useState<CityPoint | null>(null);
+  const setSelectedDisruptionId = useWarRoomStore((s) => s.setSelectedDisruptionId);
+
+  // Arc click routes real disruption-backed arcs to the disruption detail view
+  // (which surfaces the affected-shipments table). Demo/standalone arcs with
+  // no disruption_id fall back to the in-panel RouteDetailPanel.
+  const handleArcClick = (d: GlobeRoute) => {
+    if (d.disruption_id) {
+      setSelectedDisruptionId(d.disruption_id);
+      return;
+    }
+    setSelectedRoute((prev) => (prev?.id === d.id ? null : d));
+  };
 
   // Alternatives to show: hovered blocked route wins, else selected blocked route.
   // Memoized against mousemove-driven re-renders — a new array reference makes
@@ -581,18 +608,18 @@ export function InteractiveGlobePanel({ routes, stormCenter, disruptionTitle }: 
         arcDashLength={(d: GlobeRoute) => d.status === "blocked" ? 0.25 : 0.7}
         arcDashGap={(d: GlobeRoute) => d.status === "blocked" ? 0.08 : 0.4}
         arcDashAnimateTime={(d: GlobeRoute) => d.status === "blocked" ? 1400 : 2800}
-        arcAltitude={(d: GlobeRoute) => MODE_ALTITUDE[d.mode]}
+        arcAltitude={arcAltitudeFor}
         // Keep arc hover/click handlers as a fallback — they still fire on
         // direct hits against the thin visible mesh, while the custom hit-
         // layer below widens the hit area everywhere else.
-        onArcClick={(d: GlobeRoute) => setSelectedRoute((prev) => (prev?.id === d.id ? null : d))}
+        onArcClick={handleArcClick}
         onArcHover={(d: GlobeRoute | null) => setHoveredArc(d ?? null)}
 
         // ── Invisible hit layer (fat transparent tubes along each arc's great circle) ─
         customLayerData={routes}
         customThreeObject={(d: GlobeRoute) => makeArcHitMesh(d)}
         customThreeObjectUpdate={() => { /* static geometry */ }}
-        onCustomLayerClick={(d: GlobeRoute) => setSelectedRoute((prev) => (prev?.id === d.id ? null : d))}
+        onCustomLayerClick={handleArcClick}
         onCustomLayerHover={(d: GlobeRoute | null) => setHoveredArc(d ?? null)}
 
         // ── Alternative paths (appear on hover/select of blocked routes) ─

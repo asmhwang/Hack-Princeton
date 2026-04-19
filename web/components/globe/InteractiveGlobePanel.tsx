@@ -705,7 +705,7 @@ export function InteractiveGlobePanel({ routes, stormCenter, disruptionTitle }: 
           d.kind === "alternative" ? 0.18 : d.status === "blocked" ? 0.08 : 0.4
         }
         pathDashAnimateTime={(d: GlobePath) =>
-          d.kind === "alternative" ? 2200 : d.status === "blocked" ? 1400 : 2800
+          d.kind === "alternative" ? 2200 : d.status === "blocked" ? 2800 : 5200
         }
         pathTransitionDuration={0}
         onPathClick={(d: GlobePath) => {

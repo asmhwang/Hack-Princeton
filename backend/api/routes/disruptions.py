@@ -6,13 +6,14 @@ from decimal import Decimal
 from typing import Annotated, cast
 
 from fastapi import APIRouter, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import aliased
 
 from backend.api._pagination import apply_cursor
 from backend.api.deps import SessionDep
 from backend.db.models import (
     AffectedShipment,
+    Approval,
     Customer,
     Disruption,
     DraftCommunication,
@@ -21,6 +22,7 @@ from backend.db.models import (
     Port,
     PurchaseOrder,
     Shipment,
+    Signal,
     Sku,
     Supplier,
 )
@@ -232,6 +234,78 @@ async def get_disruption(
     if row is None:
         raise HTTPException(status_code=404, detail=f"Disruption {disruption_id} not found")
     return DisruptionRecord.model_validate(row)
+
+
+@router.delete("/{disruption_id}")
+async def delete_disruption(
+    disruption_id: uuid.UUID,
+    session: SessionDep,
+) -> dict[str, bool]:
+    """Delete a disruption and everything that hangs off it.
+
+    Cascade order (no DB-level ON DELETE CASCADE, so we do it manually):
+      draft_communications → approvals → mitigation_options
+      → affected_shipments → impact_reports → disruption
+    signals.promoted_to_disruption_id is nulled so the signal row survives
+    as an orphaned observation. Single transaction — all or nothing.
+    """
+    exists = (
+        await session.execute(select(Disruption.id).where(Disruption.id == disruption_id))
+    ).scalar_one_or_none()
+    if exists is None:
+        raise HTTPException(status_code=404, detail=f"Disruption {disruption_id} not found")
+
+    impact_ids = (
+        (
+            await session.execute(
+                select(ImpactReport.id).where(ImpactReport.disruption_id == disruption_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    mitigation_ids: list[uuid.UUID] = []
+    if impact_ids:
+        mitigation_ids = (
+            (
+                await session.execute(
+                    select(MitigationOption.id).where(
+                        MitigationOption.impact_report_id.in_(impact_ids)
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    if mitigation_ids:
+        await session.execute(
+            delete(DraftCommunication).where(
+                DraftCommunication.mitigation_id.in_(mitigation_ids)
+            )
+        )
+        await session.execute(
+            delete(Approval).where(Approval.mitigation_id.in_(mitigation_ids))
+        )
+    if impact_ids:
+        await session.execute(
+            delete(AffectedShipment).where(AffectedShipment.impact_report_id.in_(impact_ids))
+        )
+    if mitigation_ids:
+        await session.execute(
+            delete(MitigationOption).where(MitigationOption.id.in_(mitigation_ids))
+        )
+    if impact_ids:
+        await session.execute(delete(ImpactReport).where(ImpactReport.id.in_(impact_ids)))
+
+    await session.execute(
+        update(Signal)
+        .where(Signal.promoted_to_disruption_id == disruption_id)
+        .values(promoted_to_disruption_id=None)
+    )
+    await session.execute(delete(Disruption).where(Disruption.id == disruption_id))
+    await session.commit()
+    return {"deleted": True}
 
 
 @router.get("/{disruption_id}/impact")

@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.db.models import (
     AffectedShipment,
     Approval,
+    Disruption,
     DraftCommunication,
     ImpactReport,
     MitigationOption,
@@ -199,6 +200,12 @@ async def approve_mitigation(
             update(MitigationOption)
             .where(MitigationOption.id == mitigation_id)
             .values(status="approved")
+        )
+        # Flip parent disruption to 'resolved' so it moves out of the active column
+        await s.execute(
+            update(Disruption)
+            .where(Disruption.id == impact.disruption_id)
+            .values(status="resolved")
         )
     # `s.begin()` context exited cleanly → transaction committed.
 

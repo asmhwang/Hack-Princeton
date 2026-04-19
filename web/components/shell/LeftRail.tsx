@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence, LayoutGroup } from "motion/react";
 import { useDisruptions } from "@/hooks/useDisruptions";
+import { useDeleteDisruption } from "@/hooks/useDeleteDisruption";
 import { useWarRoomStore } from "@/lib/store";
 import { DisruptionCard } from "@/components/disruption/DisruptionCard";
 
@@ -46,6 +47,7 @@ export function LeftRail() {
   const { data = [], isLoading } = useDisruptions(filter);
   const selectedDisruptionId = useWarRoomStore((s) => s.selectedDisruptionId);
   const setSelectedDisruptionId = useWarRoomStore((s) => s.setSelectedDisruptionId);
+  const deleteDisruption = useDeleteDisruption();
 
   const sorted = [...data].sort((a, b) => Number(b.total_exposure) - Number(a.total_exposure));
 
@@ -121,6 +123,15 @@ export function LeftRail() {
                     onSelect={() =>
                       setSelectedDisruptionId(selectedDisruptionId === d.id ? null : d.id)
                     }
+                    onDelete={() => {
+                      if (
+                        typeof window !== "undefined" &&
+                        !window.confirm(`Delete "${d.title}"? This cannot be undone.`)
+                      ) {
+                        return;
+                      }
+                      deleteDisruption.mutate(d.id);
+                    }}
                   />
                 </motion.div>
               ))}

@@ -17,9 +17,10 @@ type DisruptionCardProps = Readonly<{
   disruption: Disruption;
   selected: boolean;
   onSelect: () => void;
+  onDelete?: () => void;
 }>;
 
-export function DisruptionCard({ disruption, selected, onSelect }: DisruptionCardProps) {
+export function DisruptionCard({ disruption, selected, onSelect, onDelete }: DisruptionCardProps) {
   const token = categoryTokens[disruption.category];
   const sev = severityColor(disruption.severity);
   const detectedAt = eventTime(disruption.detected_at ?? disruption.first_seen_at);
@@ -61,6 +62,55 @@ export function DisruptionCard({ disruption, selected, onSelect }: DisruptionCar
           }}
           transition={spring}
         />
+      )}
+
+      {onDelete && (
+        <span
+          role="button"
+          tabIndex={0}
+          aria-label="Delete disruption"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              e.stopPropagation();
+              onDelete();
+            }
+          }}
+          className="disruption-card-delete"
+          style={{
+            position: "absolute",
+            top: 6,
+            right: 6,
+            width: 18,
+            height: 18,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            borderRadius: 3,
+            color: "var(--color-text-subtle)",
+            fontSize: 12,
+            lineHeight: 1,
+            cursor: "pointer",
+            opacity: 0.45,
+            transition: "opacity 0.12s ease-out, background 0.12s ease-out, color 0.12s ease-out",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "var(--color-critical)";
+            e.currentTarget.style.color = "var(--color-text)";
+            e.currentTarget.style.opacity = "1";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "transparent";
+            e.currentTarget.style.color = "var(--color-text-subtle)";
+            e.currentTarget.style.opacity = "0.45";
+          }}
+        >
+          ×
+        </span>
       )}
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, gap: 8 }}>

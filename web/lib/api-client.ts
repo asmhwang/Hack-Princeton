@@ -213,6 +213,15 @@ export const apiClient = {
     });
   },
 
+  async deleteDisruption(disruptionId: string): Promise<void> {
+    await request(
+      `/api/disruptions/${disruptionId}`,
+      zod.object({}).passthrough(),
+      {},
+      { method: "DELETE" },
+    );
+  },
+
   async approveMitigation(mitigationId: string): Promise<void> {
     await request(
       `/api/mitigations/${mitigationId}/approve`,

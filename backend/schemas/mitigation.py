@@ -8,7 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 MitigationOptionType = Literal[
-    "reroute", "alternate_supplier", "expedite", "accept_delay", "switch_compliant_supplier"
+    "reroute", "alternate_supplier", "expedite", "hold", "accept_delay", "switch_compliant_supplier"
 ]
 MitigationStatus = Literal["pending", "approved", "dismissed"]
 RecipientType = Literal["supplier", "customer", "internal"]

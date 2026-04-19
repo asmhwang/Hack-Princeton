@@ -231,6 +231,15 @@ export const apiClient = {
     );
   },
 
+  async clearAll(): Promise<void> {
+    await request(
+      "/api/dev/clear",
+      zod.object({}).passthrough(),
+      {},
+      { method: "POST", body: JSON.stringify({}) },
+    );
+  },
+
   async simulate(scenario: string): Promise<void> {
     await request(
       "/api/dev/simulate",

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useMemo } from "react";
 import { useExposureSummary } from "@/hooks/useDisruptions";
 import { useSimulate } from "@/hooks/useSimulate";
+import { useClearAll } from "@/hooks/useClearAll";
 import { formatCurrency } from "@/lib/format";
 import { useWarRoomStore } from "@/lib/store";
 
@@ -19,6 +20,7 @@ const navItems = [
 export function TopBar() {
   const { data } = useExposureSummary();
   const simulate = useSimulate();
+  const clearAll = useClearAll();
   const connectionStatus = useWarRoomStore((state) => state.connectionStatus);
   const simulateInFlight = useWarRoomStore((state) => state.simulateInFlight);
   const pathname = usePathname();
@@ -58,14 +60,32 @@ export function TopBar() {
           <span className="tnum text-sm font-medium text-[var(--color-text)]">{summary}</span>
         </div>
 
-        <button
-          type="button"
-          onClick={() => simulate.mutate(DEMO_SCENARIO)}
-          disabled={simulateInFlight}
-          className="inline-flex h-8 items-center rounded border border-[var(--color-border-strong)] bg-[var(--color-surface-raised)] px-3 text-sm font-medium text-[var(--color-text)] transition-colors hover:border-[var(--color-text-muted)] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {simulateInFlight ? "Simulating" : "Simulate event"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              if (
+                typeof window !== "undefined" &&
+                !window.confirm("Clear ALL disruptions, signals, impact reports, and mitigations? This cannot be undone.")
+              ) {
+                return;
+              }
+              clearAll.mutate();
+            }}
+            disabled={clearAll.isPending}
+            className="inline-flex h-8 items-center rounded border border-[var(--color-border-strong)] bg-[var(--color-surface-raised)] px-3 text-sm font-medium text-[var(--color-text-muted)] transition-colors hover:border-[var(--color-critical)] hover:text-[var(--color-critical)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {clearAll.isPending ? "Clearing" : "Clear all"}
+          </button>
+          <button
+            type="button"
+            onClick={() => simulate.mutate(DEMO_SCENARIO)}
+            disabled={simulateInFlight}
+            className="inline-flex h-8 items-center rounded border border-[var(--color-border-strong)] bg-[var(--color-surface-raised)] px-3 text-sm font-medium text-[var(--color-text)] transition-colors hover:border-[var(--color-text-muted)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {simulateInFlight ? "Simulating" : "Simulate event"}
+          </button>
+        </div>
       </div>
 
       <div className="flex items-center justify-end border-l border-[var(--color-border)] px-4 max-lg:hidden">

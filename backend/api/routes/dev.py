@@ -10,8 +10,19 @@ from typing import Literal
 import asyncpg
 from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy import delete
 
 from backend.api.deps import SessionDep
+from backend.db.models import (
+    AffectedShipment,
+    AgentLog,
+    Approval,
+    Disruption,
+    DraftCommunication,
+    ImpactReport,
+    MitigationOption,
+    Signal,
+)
 from backend.db.session import DBSettings
 from backend.scripts.scenarios import SCENARIOS
 from backend.scripts.scenarios._types import Scenario
@@ -225,6 +236,45 @@ async def simulate(
         scenario=body.scenario,
         expected=dataclasses.asdict(scenario.expected),
     )
+
+
+class ClearResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    cleared: bool
+    counts: dict[str, int]
+
+
+@router.post("/clear")
+async def clear_all(session: SessionDep) -> ClearResponse:
+    """Wipe every disruption and everything downstream.
+
+    Deletes in FK-safe order:
+      draft_communications → approvals → affected_shipments → mitigation_options
+      → impact_reports → disruptions → signals → agent_log
+
+    Reference tables (ports, suppliers, SKUs, customers, purchase_orders,
+    shipments) are intentionally preserved — prime_chain rows are shared
+    across scenarios and re-created idempotently on next simulate.
+
+    Single transaction. Returns per-table row counts removed.
+    """
+    counts: dict[str, int] = {}
+    # Order matters — children first to avoid FK violations.
+    for table in (
+        DraftCommunication,
+        Approval,
+        AffectedShipment,
+        MitigationOption,
+        ImpactReport,
+        Disruption,
+        Signal,
+        AgentLog,
+    ):
+        result = await session.execute(delete(table))
+        counts[table.__tablename__] = result.rowcount or 0
+    await session.commit()
+    return ClearResponse(cleared=True, counts=counts)
 
 
 async def _notify(channel: str, payload: str) -> None:

@@ -56,10 +56,16 @@ type ExplainabilityDrawerProps = Readonly<{
 export function ExplainabilityDrawer({ open, option, impact, onClose }: ExplainabilityDrawerProps) {
   const sql = impact?.sql_executed ?? impact?.generated_sql;
   const reasoningTrace = impact?.reasoning_trace;
+  const formatValue = (v: unknown): string => {
+    if (v == null) return "";
+    if (typeof v === "string") return v;
+    if (typeof v === "number" || typeof v === "boolean") return String(v);
+    return JSON.stringify(v, null, 2);
+  };
   const steps = Array.isArray(reasoningTrace?.steps)
     ? (reasoningTrace.steps as { label: string; value: string }[])
     : typeof reasoningTrace === "object" && reasoningTrace !== null
-      ? Object.entries(reasoningTrace).map(([k, v]) => ({ label: k, value: String(v) }))
+      ? Object.entries(reasoningTrace).map(([k, v]) => ({ label: k, value: formatValue(v) }))
       : [];
 
   return (
@@ -177,9 +183,21 @@ export function ExplainabilityDrawer({ open, option, impact, onClose }: Explaina
                           <div style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text)", marginBottom: 3 }}>
                             {step.label}
                           </div>
-                          <div style={{ fontSize: 12, lineHeight: "18px", color: "var(--color-text-muted)" }}>
+                          <pre
+                            style={{
+                              margin: 0,
+                              fontSize: 12,
+                              lineHeight: "18px",
+                              color: "var(--color-text-muted)",
+                              fontFamily: step.value.startsWith("{") || step.value.startsWith("[")
+                                ? "var(--font-mono)"
+                                : "inherit",
+                              whiteSpace: "pre-wrap",
+                              wordBreak: "break-word",
+                            }}
+                          >
                             {step.value}
-                          </div>
+                          </pre>
                         </div>
                       </li>
                     ))}

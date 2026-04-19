@@ -65,15 +65,56 @@ export function ExplainabilityDrawer({ open, option, impact, onClose }: Explaina
     synthesized_sql?: string;
   };
 
-  const summarizeArgs = (args: Record<string, unknown> | undefined): string => {
-    if (!args) return "";
-    const parts: string[] = [];
-    for (const [k, v] of Object.entries(args)) {
-      if (typeof v === "number") parts.push(`${k}=${v}`);
-      else if (typeof v === "string") parts.push(`${k}="${v.length > 40 ? v.slice(0, 37) + "..." : v}"`);
-      else if (Array.isArray(v)) parts.push(`${k}=[${v.length} items]`);
+  // Tool name → friendly English narration. label = what the agent did.
+  // value = (rows, key arg) — kept short so the demo audience can read it
+  // without needing to know SQL.
+  const narrateToolCall = (call: ToolCall): Step => {
+    const name = call.tool_name ?? "tool";
+    const rows = call.row_count;
+    const args = call.args ?? {};
+
+    switch (name) {
+      case "shipments_touching_region": {
+        const r = args.radius_km;
+        return {
+          label: `Identified ${rows ?? "?"} in-transit shipments inside the advisory radius`,
+          value: r ? `Geofence: ${r} km around the disruption centroid` : "",
+        };
+      }
+      case "purchase_orders_for_skus":
+        return {
+          label: `Linked those shipments to ${rows ?? "?"} purchase orders`,
+          value: "Joined via po_id to surface customers and revenue exposure",
+        };
+      case "customers_by_po": {
+        const poCount = args.po_count;
+        return {
+          label: `Grouped ${poCount ?? rows ?? "?"} POs across ${rows ?? "?"} customer accounts`,
+          value: "Determined which downstream customers are at risk",
+        };
+      }
+      case "exposure_aggregate": {
+        const region = args.region;
+        return {
+          label: `Aggregated total exposure for the affected region`,
+          value: region ? `Region: ${region}` : "",
+        };
+      }
+      case "sla_breach_projection": {
+        const delay = args.delay_days;
+        return {
+          label: `Projected ${rows ?? "?"} SLA breaches at +${delay ?? "?"} day delay`,
+          value: "Compared each PO's promised ETA against the new ETA",
+        };
+      }
+      default: {
+        const pretty = name.replace(/_/g, " ");
+        return {
+          label: `${pretty.charAt(0).toUpperCase()}${pretty.slice(1)}${rows != null ? ` (${rows} rows)` : ""}`,
+          value: "",
+        };
+      }
     }
-    return parts.join(", ");
   };
 
   const buildSteps = (): Step[] => {
@@ -84,27 +125,18 @@ export function ExplainabilityDrawer({ open, option, impact, onClose }: Explaina
     const out: Step[] = [];
     const trace = reasoningTrace as Record<string, unknown>;
 
-    // tool_calls: explode each into its own readable step.
     const calls = trace.tool_calls;
     if (Array.isArray(calls)) {
-      for (const raw of calls) {
-        const call = raw as ToolCall;
-        const name = call.tool_name ?? "tool";
-        const rows = typeof call.row_count === "number" ? ` · ${call.row_count} rows` : "";
-        const argSummary = summarizeArgs(call.args);
-        out.push({
-          label: `${name}${rows}`,
-          value: argSummary || "(no args)",
-        });
-      }
+      for (const raw of calls) out.push(narrateToolCall(raw as ToolCall));
     }
 
-    // Other keys: render scalars/strings inline; skip the raw tool_calls dump.
+    // final_reasoning + any other plain-text keys, rendered as their own step.
     for (const [k, v] of Object.entries(trace)) {
       if (k === "tool_calls") continue;
       if (v == null) continue;
       if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
-        out.push({ label: k.replace(/_/g, " "), value: String(v) });
+        const label = k === "final_reasoning" ? "Recommendation" : k.replace(/_/g, " ");
+        out.push({ label, value: String(v) });
       }
     }
     return out;

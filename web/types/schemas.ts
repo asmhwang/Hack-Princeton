@@ -11,57 +11,77 @@ export const sourceCategorySchema = z.enum([
   "industrial",
 ]);
 
+// Schemas are intentionally non-strict (.passthrough) — the backend Pydantic
+// models are authoritative, and they evolve faster than this file. Required
+// fields here are only the ones the UI truly depends on.
 export const signalSchema = z
   .object({
     id: z.string(),
     source_category: sourceCategorySchema,
     title: z.string(),
-    region: z.string(),
-    severity: z.number().int().min(1).max(5),
+    region: z.string().optional().nullable(),
+    // Backend's Signal model has no severity column; UI tolerates absence.
+    severity: z.number().int().min(1).max(5).optional(),
     detected_at: z.string().optional(),
     first_seen_at: z.string().optional(),
+    // Backend sends source_urls (list); keep the legacy source_url optional
+    // for UI that still expects a single string.
     source_url: z.string().url().optional().nullable(),
+    source_urls: z.array(z.string()).optional(),
   })
-  .strict();
+  .passthrough();
 
 export const disruptionSchema = z
   .object({
     id: z.string(),
     title: z.string(),
     category: sourceCategorySchema,
-    region: z.string(),
+    region: z.string().optional().nullable(),
     severity: z.number().int().min(1).max(5),
     status: z.enum(["active", "monitoring", "resolved"]).default("active"),
     detected_at: z.string().optional(),
     first_seen_at: z.string().optional(),
     last_seen_at: z.string().optional(),
     summary: z.string().optional().nullable(),
-    total_exposure: decimalString.default("0"),
-    affected_shipments_count: z.number().int().nonnegative().default(0),
+    // Single-disruption endpoint sends null for these (only the list JOIN
+    // populates them); preprocess so zod doesn't throw on null.
+    total_exposure: z.preprocess(
+      (v) => (v === null || v === undefined ? "0" : v),
+      decimalString,
+    ),
+    affected_shipments_count: z.preprocess(
+      (v) => (v === null || v === undefined ? 0 : v),
+      z.number().int().nonnegative(),
+    ),
     lat: z.number().optional().nullable(),
     lng: z.number().optional().nullable(),
     radius_km: decimalString.optional().nullable(),
+    // Backend fields we don't use but shouldn't reject:
+    source_signal_ids: z.array(z.string()).optional(),
+    confidence: decimalString.optional().nullable(),
   })
-  .strict();
+  .passthrough();
 
 export const affectedShipmentSchema = z
   .object({
     shipment_id: z.string(),
-    sku: z.string(),
-    customer_name: z.string(),
-    po_number: z.string(),
-    origin: z.string(),
-    destination: z.string(),
     exposure: decimalString,
-    eta: z.string().optional().nullable(),
     days_to_sla_breach: z.number().optional().nullable(),
-    status: z.string(),
+    // Below are UI-level enrichments the backend doesn't currently populate;
+    // they surface empty until a richer route endpoint lands.
+    sku: z.string().optional(),
+    customer_name: z.string().optional(),
+    po_number: z.string().optional(),
+    origin: z.string().optional(),
+    destination: z.string().optional(),
+    eta: z.string().optional().nullable(),
+    status: z.string().optional(),
     origin_lat: z.number().optional().nullable(),
     origin_lng: z.number().optional().nullable(),
     destination_lat: z.number().optional().nullable(),
     destination_lng: z.number().optional().nullable(),
   })
-  .strict();
+  .passthrough();
 
 export const impactReportSchema = z
   .object({
@@ -77,7 +97,7 @@ export const impactReportSchema = z
     created_at: z.string().optional(),
     generated_at: z.string().optional(),
   })
-  .strict();
+  .passthrough();
 
 export const mitigationOptionSchema = z
   .object({
@@ -100,8 +120,10 @@ export const mitigationOptionSchema = z
     confidence: z.number().min(0).max(1),
     rationale: z.string().optional(),
     status: z.enum(["pending", "approved", "rejected", "dismissed"]).default("pending"),
+    // Backend's MitigationWithDrafts embeds drafts — allow through without reparsing.
+    drafts: z.array(z.unknown()).optional(),
   })
-  .strict();
+  .passthrough();
 
 export const draftCommunicationSchema = z
   .object({
@@ -149,6 +171,25 @@ export const analyticsSummarySchema = z
   })
   .strict();
 
+// ActiveRoute — frozen contract shared with backend Stream 2
+// (docs/superpowers/plans/2026-04-18-globe-routes-stream2-backend.md)
+export const activeRouteSchema = z
+  .object({
+    id: z.string(),
+    disruption_id: z.string(),
+    disruption_category: sourceCategorySchema,
+    from: z.tuple([z.number(), z.number()]),   // [lat, lng]
+    to: z.tuple([z.number(), z.number()]),     // [lat, lng]
+    origin_name: z.string(),
+    destination_name: z.string(),
+    mode: z.enum(["ocean", "air", "rail", "truck"]),
+    status: z.enum(["blocked", "watch", "good"]),
+    exposure: decimalString,
+    transit_days: z.number().int(),
+    carrier: z.string(),
+  })
+  .passthrough();
+
 export const wsEventSchema = z.discriminatedUnion("channel", [
   z
     .object({
@@ -195,4 +236,5 @@ export type ActivityItem = z.infer<typeof activityItemSchema>;
 export type ExposureSummary = z.infer<typeof exposureSummarySchema>;
 export type AnalyticsPoint = z.infer<typeof analyticsPointSchema>;
 export type AnalyticsSummary = z.infer<typeof analyticsSummarySchema>;
+export type ActiveRoute = z.infer<typeof activeRouteSchema>;
 export type WsEvent = z.infer<typeof wsEventSchema>;

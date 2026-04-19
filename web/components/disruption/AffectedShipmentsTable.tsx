@@ -58,12 +58,14 @@ export function AffectedShipmentsTable({ shipments }: AffectedShipmentsTableProp
 
   const sorted = useMemo(() => {
     const filtered = q
-      ? shipments.filter(
-          (s) =>
-            s.shipment_id.toLowerCase().includes(q.toLowerCase()) ||
-            s.customer_name.toLowerCase().includes(q.toLowerCase()) ||
-            s.sku.toLowerCase().includes(q.toLowerCase()),
-        )
+      ? shipments.filter((s) => {
+          const needle = q.toLowerCase();
+          return (
+            s.shipment_id.toLowerCase().includes(needle) ||
+            (s.customer_name ?? "").toLowerCase().includes(needle) ||
+            (s.sku ?? "").toLowerCase().includes(needle)
+          );
+        })
       : shipments;
     return [...filtered].sort((a, b) => {
       const av = a[sortBy] ?? "";
@@ -254,7 +256,7 @@ export function AffectedShipmentsTable({ shipments }: AffectedShipmentsTableProp
                         fontFamily: "var(--font-mono)",
                       }}
                     >
-                      {s.status.replace(/_/g, " ")}
+                      {(s.status ?? "unknown").replace(/_/g, " ")}
                     </span>
                   </td>
                 </tr>

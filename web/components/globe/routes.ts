@@ -1,4 +1,4 @@
-import type { AffectedShipment } from "@/types/schemas";
+import type { ActiveRoute, AffectedShipment } from "@/types/schemas";
 
 export type RouteStatus = "good" | "watch" | "blocked";
 export type RouteMode = "ocean" | "air" | "rail" | "truck";
@@ -239,8 +239,8 @@ export function routesFromShipments(shipments: AffectedShipment[]): GlobeRoute[]
 
     return [{
       id: shipment.shipment_id,
-      origin: shipment.origin,
-      destination: shipment.destination,
+      origin: shipment.origin ?? "Origin",
+      destination: shipment.destination ?? "Destination",
       from: [shipment.origin_lat, shipment.origin_lng],
       to: [shipment.destination_lat, shipment.destination_lng],
       status,
@@ -260,4 +260,36 @@ export function routesFromShipments(shipments: AffectedShipment[]): GlobeRoute[]
   });
 
   return routes.length > 0 ? routes : demoRoutes;
+}
+
+// Adapter for the Stream 2 /api/disruptions/active/routes payload.
+// Maps the ActiveRoute contract 1:1 into GlobeRoute. The `recommendation`
+// and `reason` fields on GlobeRoute are used by the hover tooltip / bottom
+// detail panel; we synthesize short placeholders from the route's status
+// until the backend surfaces richer context.
+export function routesFromActiveRoutes(rows: ActiveRoute[]): GlobeRoute[] {
+  return rows.map((r): GlobeRoute => ({
+    id: r.id,
+    origin: r.origin_name,
+    destination: r.destination_name,
+    from: r.from,
+    to: r.to,
+    status: r.status,
+    mode: r.mode,
+    exposure: r.exposure,
+    transit_days: r.transit_days,
+    carrier: r.carrier,
+    recommendation:
+      r.status === "blocked"
+        ? "Approve a reroute or expedite option for this shipment group."
+        : r.status === "watch"
+        ? "Keep route under watch; refresh ETA after the next agent cycle."
+        : "No action required — carrier on schedule.",
+    reason:
+      r.status === "blocked"
+        ? `Lane crosses ${r.disruption_category} disruption; SLA breach risk elevated.`
+        : r.status === "watch"
+        ? `Signals elevated on ${r.disruption_category} lane; monitoring.`
+        : "Signals within normal range.",
+  }));
 }

@@ -1,11 +1,12 @@
 "use client";
 
 import { useWarRoomStore } from "@/lib/store";
+import { useActiveRoutes } from "@/hooks/useActiveRoutes";
 import { useDisruptions, useExposureSummary } from "@/hooks/useDisruptions";
 import { useSimulate } from "@/hooks/useSimulate";
 import { DisruptionDetailView } from "@/components/disruption/DisruptionDetailView";
 import { InteractiveGlobePanel } from "@/components/globe/InteractiveGlobePanel";
-import { demoRoutes } from "@/components/globe/routes";
+import { demoRoutes, routesFromActiveRoutes } from "@/components/globe/routes";
 import { categoryTokens } from "@/lib/design-tokens";
 import { formatCurrency, formatRelativeTime, eventTime } from "@/lib/format";
 
@@ -226,14 +227,19 @@ function SimulateCard() {
 
 export default function WarRoomPage() {
   const selectedDisruptionId = useWarRoomStore((s) => s.selectedDisruptionId);
+  const { data: activeRoutes = [] } = useActiveRoutes();
 
   if (selectedDisruptionId) {
     return <DisruptionDetailView disruptionId={selectedDisruptionId} />;
   }
 
+  // Prefer real routes; fall back to demoRoutes when the active list is empty
+  // (cold start, or post-clear) so the globe never renders blank.
+  const routes = activeRoutes.length > 0 ? routesFromActiveRoutes(activeRoutes) : demoRoutes;
+
   return (
     <div style={{ minHeight: "100%" }}>
-      <InteractiveGlobePanel routes={demoRoutes} />
+      <InteractiveGlobePanel routes={routes} />
       <div style={{ padding: 24, display: "grid", gridTemplateColumns: "1fr 340px", gap: 20, alignItems: "start" }}>
         <div>
           <StatusGrid />

@@ -30,7 +30,7 @@ export function TopBar() {
   }, [data]);
 
   return (
-    <header className="grid h-14 grid-cols-[272px_minmax(0,1fr)_300px] border-b border-[var(--color-border)] bg-[var(--color-bg)] max-lg:h-auto max-lg:grid-cols-1">
+    <header className="grid h-14 grid-cols-[272px_minmax(0,1fr)_340px] border-b border-[var(--color-border)] bg-[var(--color-bg)] max-lg:h-auto max-lg:grid-cols-1">
       <div className="flex items-center border-r border-[var(--color-border)] px-4 max-lg:h-12 max-lg:border-r-0">
         <span className="text-[15px] font-semibold">suppl.ai</span>
       </div>

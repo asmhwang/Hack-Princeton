@@ -77,12 +77,16 @@ export function useLiveUpdates() {
         useWarRoomStore.getState().receiveWsEvent(event);
         if (event.channel === "new_disruption") {
           void queryClient.invalidateQueries({ queryKey: queryKeys.disruptions() });
+          void queryClient.invalidateQueries({ queryKey: queryKeys.activeRoutes });
         }
         if (event.channel === "new_signal") {
           void queryClient.invalidateQueries({ queryKey: queryKeys.signals });
         }
         if (event.channel === "new_impact" || event.channel === "new_mitigation") {
           void queryClient.invalidateQueries();
+          // Explicit for clarity — the blanket invalidate above covers it,
+          // but surfacing the intent helps when we tighten that later.
+          void queryClient.invalidateQueries({ queryKey: queryKeys.activeRoutes });
         }
         if (event.channel === "new_approval") {
           void queryClient.invalidateQueries({ queryKey: queryKeys.exposure });

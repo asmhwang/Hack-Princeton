@@ -56,17 +56,61 @@ type ExplainabilityDrawerProps = Readonly<{
 export function ExplainabilityDrawer({ open, option, impact, onClose }: ExplainabilityDrawerProps) {
   const sql = impact?.sql_executed ?? impact?.generated_sql;
   const reasoningTrace = impact?.reasoning_trace;
-  const formatValue = (v: unknown): string => {
-    if (v == null) return "";
-    if (typeof v === "string") return v;
-    if (typeof v === "number" || typeof v === "boolean") return String(v);
-    return JSON.stringify(v, null, 2);
+
+  type Step = { label: string; value: string };
+  type ToolCall = {
+    tool_name?: string;
+    row_count?: number;
+    args?: Record<string, unknown>;
+    synthesized_sql?: string;
   };
-  const steps = Array.isArray(reasoningTrace?.steps)
-    ? (reasoningTrace.steps as { label: string; value: string }[])
-    : typeof reasoningTrace === "object" && reasoningTrace !== null
-      ? Object.entries(reasoningTrace).map(([k, v]) => ({ label: k, value: formatValue(v) }))
-      : [];
+
+  const summarizeArgs = (args: Record<string, unknown> | undefined): string => {
+    if (!args) return "";
+    const parts: string[] = [];
+    for (const [k, v] of Object.entries(args)) {
+      if (typeof v === "number") parts.push(`${k}=${v}`);
+      else if (typeof v === "string") parts.push(`${k}="${v.length > 40 ? v.slice(0, 37) + "..." : v}"`);
+      else if (Array.isArray(v)) parts.push(`${k}=[${v.length} items]`);
+    }
+    return parts.join(", ");
+  };
+
+  const buildSteps = (): Step[] => {
+    if (!reasoningTrace || typeof reasoningTrace !== "object") return [];
+    if (Array.isArray((reasoningTrace as { steps?: unknown }).steps)) {
+      return (reasoningTrace as { steps: Step[] }).steps;
+    }
+    const out: Step[] = [];
+    const trace = reasoningTrace as Record<string, unknown>;
+
+    // tool_calls: explode each into its own readable step.
+    const calls = trace.tool_calls;
+    if (Array.isArray(calls)) {
+      for (const raw of calls) {
+        const call = raw as ToolCall;
+        const name = call.tool_name ?? "tool";
+        const rows = typeof call.row_count === "number" ? ` · ${call.row_count} rows` : "";
+        const argSummary = summarizeArgs(call.args);
+        out.push({
+          label: `${name}${rows}`,
+          value: argSummary || "(no args)",
+        });
+      }
+    }
+
+    // Other keys: render scalars/strings inline; skip the raw tool_calls dump.
+    for (const [k, v] of Object.entries(trace)) {
+      if (k === "tool_calls") continue;
+      if (v == null) continue;
+      if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
+        out.push({ label: k.replace(/_/g, " "), value: String(v) });
+      }
+    }
+    return out;
+  };
+
+  const steps = buildSteps();
 
   return (
     <AnimatePresence>

@@ -13,6 +13,7 @@ export function WsDot({ status, pulse = true }: WsDotProps) {
 
   return (
     <span
+      role="status"
       aria-label={`WebSocket ${status}`}
       className={status === "connected" && pulse ? "pulse-ok" : ""}
       style={{

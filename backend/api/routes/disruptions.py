@@ -280,13 +280,9 @@ async def delete_disruption(
 
     if mitigation_ids:
         await session.execute(
-            delete(DraftCommunication).where(
-                DraftCommunication.mitigation_id.in_(mitigation_ids)
-            )
+            delete(DraftCommunication).where(DraftCommunication.mitigation_id.in_(mitigation_ids))
         )
-        await session.execute(
-            delete(Approval).where(Approval.mitigation_id.in_(mitigation_ids))
-        )
+        await session.execute(delete(Approval).where(Approval.mitigation_id.in_(mitigation_ids)))
     if impact_ids:
         await session.execute(
             delete(AffectedShipment).where(AffectedShipment.impact_report_id.in_(impact_ids))

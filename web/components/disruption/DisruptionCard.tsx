@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import type { Disruption } from "@/types/schemas";
 import { categoryTokens } from "@/lib/design-tokens";
 import { formatCurrency, formatRelativeTime, eventTime } from "@/lib/format";
+import { useClock } from "@/hooks/useClock";
 
 const spring = { type: "spring" as const, stiffness: 260, damping: 26 };
 
@@ -21,6 +22,7 @@ type DisruptionCardProps = Readonly<{
 }>;
 
 export function DisruptionCard({ disruption, selected, onSelect, onDelete }: DisruptionCardProps) {
+  useClock();
   const token = categoryTokens[disruption.category];
   const sev = severityColor(disruption.severity);
   const detectedAt = eventTime(disruption.detected_at ?? disruption.first_seen_at);

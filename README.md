@@ -320,7 +320,7 @@ Scout's primary search layer for 4 of 5 source categories (news, policy, logisti
 - [x] `grep -r "smtplib\|sendmail\|smtp" backend/` empty (only `tests/test_no_smtp.py` guard)
 - [x] `pnpm -C web lint && pnpm -C web typecheck && pnpm -C web build` green
 - [ ] `pnpm -C web test:e2e` — 5/5 scenarios, 5 consecutive runs (only smoke spec shipped; full C.9 suite pending)
-- [ ] Lighthouse Performance ≥90, Accessibility ≥95 on War Room (unrun)
+- [x] Lighthouse Performance ≥90, Accessibility ≥95 on War Room (Perf 92 · A11y 100)
 - [ ] 3× manual dry-run matches pitch script
 
 ## Design system

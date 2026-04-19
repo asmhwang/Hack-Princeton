@@ -107,9 +107,12 @@ async def simulate(
     disruption_id = uuid.uuid4()
     trace_id = uuid.uuid4()
     now = datetime.now(UTC).replace(tzinfo=None)
-    disruption_first_seen = now - timedelta(
-        hours=max(sfx.hours_before_disruption for sfx in fx.signals)
-    )
+    # Anchor the disruption itself at "now" so the card shows "just now" when
+    # freshly simulated. Signals keep their relative hours_before_disruption
+    # offset — that's the narrative (we saw warning signals hours before the
+    # disruption emerged). But the disruption row and the impact/mitigation
+    # cascade all key off `now`.
+    disruption_first_seen = now
 
     # Insert all fixture signals (multi-signal scenarios are common — e.g. a
     # typhoon has both a weather advisory and a port closure feed).

@@ -21,6 +21,7 @@ from .mitigation import (
     MitigationWithDrafts,
     RecipientType,
 )
+from .route import ActiveRoute, RouteMode, RouteStatus
 from .signal import SignalClassification, SignalRecord, SourceCategory
 
 __all__ = [
@@ -52,4 +53,7 @@ __all__ = [
     "ApprovalRequest",
     "ApprovalResponse",
     "ExposureBucket",
+    "ActiveRoute",
+    "RouteMode",
+    "RouteStatus",
 ]

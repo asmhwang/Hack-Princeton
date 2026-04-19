@@ -30,6 +30,7 @@ from backend.db.models import (
     Sku,
     Supplier,
 )
+from backend.scripts.scenarios._destinations import SCENARIO_DESTINATIONS
 from backend.scripts.scenarios._types import Scenario
 
 
@@ -37,12 +38,17 @@ async def seed_prime_chain(s: AsyncSession, scenario: Scenario) -> None:
     """Insert the prime-chain rows for ``scenario``. Idempotent."""
     sid = scenario.id
     port_id = f"PORT-PRIME-{sid[:6].upper()}"
+    dest_port_id = f"PORT-PRIME-{sid[:4].upper()}-DEST"
     supplier_id = f"SUP-PRIME-{sid[:6].upper()}"
     sku_id = f"SKU-PRIME-{sid[:6].upper()}"
     customer_id = f"CUST-PRIME-{sid[:6].upper()}"
     po_ids = [f"PO-PRIME-{sid[:4].upper()}-{i}" for i in range(1, 4)]
     shipment_ids = [f"SHP-PRIME-{sid[:4].upper()}-{i}" for i in range(1, 4)]
     today = date(2026, 4, 18)
+
+    dest_name, dest_lat, dest_lng = SCENARIO_DESTINATIONS.get(
+        sid, (f"Prime-{sid}-dest", scenario.disruption.lat, scenario.disruption.lng)
+    )
 
     await s.execute(
         pg_insert(Port)
@@ -52,6 +58,18 @@ async def seed_prime_chain(s: AsyncSession, scenario: Scenario) -> None:
             country="XX",
             lat=Decimal(str(scenario.disruption.lat)),
             lng=Decimal(str(scenario.disruption.lng)),
+            modes=["sea"],
+        )
+        .on_conflict_do_nothing()
+    )
+    await s.execute(
+        pg_insert(Port)
+        .values(
+            id=dest_port_id,
+            name=dest_name,
+            country="XX",
+            lat=Decimal(str(dest_lat)),
+            lng=Decimal(str(dest_lng)),
             modes=["sea"],
         )
         .on_conflict_do_nothing()
@@ -117,7 +135,7 @@ async def seed_prime_chain(s: AsyncSession, scenario: Scenario) -> None:
                 po_id=po_ids[i],
                 supplier_id=supplier_id,
                 origin_port_id=port_id,
-                dest_port_id=port_id,
+                dest_port_id=dest_port_id,
                 status="in_transit",
                 mode="sea",
                 eta=today + timedelta(days=14 + i * 7),

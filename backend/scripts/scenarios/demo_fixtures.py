@@ -587,6 +587,9 @@ class HistoricalFixture:
     source_signals: tuple[SignalFixture, ...]
     mitigations: tuple[MitigationFixture, ...]
     affected_count: int  # how many affected_shipments rows to emit (≤ 3)
+    destination_name: str
+    destination_lat: float
+    destination_lng: float
 
 
 HISTORICAL_FIXTURES: tuple[HistoricalFixture, ...] = (
@@ -639,6 +642,9 @@ HISTORICAL_FIXTURES: tuple[HistoricalFixture, ...] = (
             ),
         ),
         affected_count=3,
+        destination_name="Rotterdam",
+        destination_lat=51.92,
+        destination_lng=4.48,
     ),
     HistoricalFixture(
         slug="cbameu",
@@ -679,6 +685,9 @@ HISTORICAL_FIXTURES: tuple[HistoricalFixture, ...] = (
             ),
         ),
         affected_count=2,
+        destination_name="New York",
+        destination_lat=40.71,
+        destination_lng=-74.01,
     ),
     HistoricalFixture(
         slug="panama",
@@ -744,6 +753,9 @@ HISTORICAL_FIXTURES: tuple[HistoricalFixture, ...] = (
             ),
         ),
         affected_count=3,
+        destination_name="New York",
+        destination_lat=40.71,
+        destination_lng=-74.01,
     ),
     HistoricalFixture(
         slug="samsvn",
@@ -784,6 +796,9 @@ HISTORICAL_FIXTURES: tuple[HistoricalFixture, ...] = (
             ),
         ),
         affected_count=2,
+        destination_name="Tokyo",
+        destination_lat=35.65,
+        destination_lng=139.75,
     ),
     HistoricalFixture(
         slug="tsmcfab",
@@ -824,6 +839,9 @@ HISTORICAL_FIXTURES: tuple[HistoricalFixture, ...] = (
             ),
         ),
         affected_count=2,
+        destination_name="Los Angeles",
+        destination_lat=34.05,
+        destination_lng=-118.24,
     ),
     HistoricalFixture(
         slug="thbaht",
@@ -867,5 +885,8 @@ HISTORICAL_FIXTURES: tuple[HistoricalFixture, ...] = (
             ),
         ),
         affected_count=1,
+        destination_name="Tokyo",
+        destination_lat=35.65,
+        destination_lng=139.75,
     ),
 )

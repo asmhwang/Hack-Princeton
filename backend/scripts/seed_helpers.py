@@ -47,6 +47,9 @@ async def seed_historical_prime_chain(
     lat: float,
     lng: float,
     base_date: date,
+    destination_name: str,
+    destination_lat: float,
+    destination_lng: float,
 ) -> list[str]:
     """Insert a minimal Port/Supplier/SKU/Customer/3 POs/3 Shipments set for a
     historical disruption fixture. Returns the 3 shipment_ids.
@@ -56,6 +59,7 @@ async def seed_historical_prime_chain(
     """
     tag = slug[:6].upper()
     port_id = f"PORT-PRIME-HIST-{tag}"
+    dest_port_id = f"PORT-PRIME-HIST-{tag}-DEST"
     supplier_id = f"SUP-PRIME-HIST-{tag}"
     sku_id = f"SKU-PRIME-HIST-{tag}"
     customer_id = f"CUST-PRIME-HIST-{tag}"
@@ -70,6 +74,18 @@ async def seed_historical_prime_chain(
             country="XX",
             lat=Decimal(str(lat)),
             lng=Decimal(str(lng)),
+            modes=["sea"],
+        )
+        .on_conflict_do_nothing()
+    )
+    await s.execute(
+        pg_insert(Port)
+        .values(
+            id=dest_port_id,
+            name=destination_name,
+            country="XX",
+            lat=Decimal(str(destination_lat)),
+            lng=Decimal(str(destination_lng)),
             modes=["sea"],
         )
         .on_conflict_do_nothing()
@@ -135,7 +151,7 @@ async def seed_historical_prime_chain(
                 po_id=po_ids[i],
                 supplier_id=supplier_id,
                 origin_port_id=port_id,
-                dest_port_id=port_id,
+                dest_port_id=dest_port_id,
                 status="arrived",  # historical: already delivered
                 mode="sea",
                 eta=base_date + timedelta(days=14 + i * 7),

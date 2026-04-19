@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
-from typing import Annotated
+from datetime import date, datetime
+from decimal import Decimal
+from typing import Annotated, cast
 
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import select
+from sqlalchemy.orm import aliased
 
 from backend.api._pagination import apply_cursor
 from backend.api.deps import SessionDep
@@ -15,8 +17,12 @@ from backend.db.models import (
     DraftCommunication,
     ImpactReport,
     MitigationOption,
+    Port,
+    Shipment,
+    Supplier,
 )
 from backend.schemas import (
+    ActiveRoute,
     AffectedShipmentEntry,
     DisruptionRecord,
     ImpactReportRecord,
@@ -24,6 +30,7 @@ from backend.schemas import (
     MitigationWithDrafts,
 )
 from backend.schemas.mitigation import DraftCommunicationRecord
+from backend.schemas.route import RouteMode, RouteStatus
 
 router = APIRouter()
 
@@ -55,6 +62,107 @@ async def list_disruptions(
     result = await session.execute(stmt)
     rows = result.scalars().all()
     return [DisruptionRecord.model_validate(r) for r in rows]
+
+
+_SEV_BLOCKED = 4
+_SEV_WATCH = 3
+
+
+def _route_status(severity: int) -> RouteStatus:
+    if severity >= _SEV_BLOCKED:
+        return "blocked"
+    if severity == _SEV_WATCH:
+        return "watch"
+    return "good"
+
+
+def _route_mode(shipment_mode: str | None) -> RouteMode:
+    value = (shipment_mode or "").lower()
+    if value == "sea":
+        return "ocean"
+    if value in {"ocean", "air", "rail", "truck"}:
+        return cast(RouteMode, value)
+    return "ocean"
+
+
+@router.get("/active/routes", response_model=list[ActiveRoute], response_model_by_alias=True)
+async def list_active_routes(session: SessionDep) -> list[ActiveRoute]:
+    """Return one ActiveRoute per affected shipment across currently-active disruptions.
+
+    Joins the most-recent impact report per active disruption through
+    affected_shipments → shipments → ports (origin + dest) → suppliers. Used by
+    the frontend globe to render arcs.
+    """
+    origin_port = aliased(Port)
+    dest_port = aliased(Port)
+
+    latest_ir = (
+        select(ImpactReport.id)
+        .where(ImpactReport.disruption_id == Disruption.id)
+        .order_by(ImpactReport.generated_at.desc())
+        .limit(1)
+        .correlate(Disruption)
+        .scalar_subquery()
+    )
+
+    stmt = (
+        select(
+            Shipment.id.label("shipment_id"),
+            Disruption.id.label("disruption_id"),
+            Disruption.category.label("disruption_category"),
+            Disruption.severity.label("severity"),
+            origin_port.lat.label("origin_lat"),
+            origin_port.lng.label("origin_lng"),
+            origin_port.name.label("origin_name"),
+            dest_port.lat.label("dest_lat"),
+            dest_port.lng.label("dest_lng"),
+            dest_port.name.label("dest_name"),
+            Shipment.mode.label("mode"),
+            Shipment.eta.label("eta"),
+            AffectedShipment.exposure.label("exposure"),
+            Supplier.name.label("carrier"),
+        )
+        .select_from(Disruption)
+        .join(ImpactReport, ImpactReport.id == latest_ir)
+        .join(AffectedShipment, AffectedShipment.impact_report_id == ImpactReport.id)
+        .join(Shipment, Shipment.id == AffectedShipment.shipment_id)
+        .join(origin_port, origin_port.id == Shipment.origin_port_id)
+        .join(dest_port, dest_port.id == Shipment.dest_port_id)
+        .outerjoin(Supplier, Supplier.id == Shipment.supplier_id)
+        .where(Disruption.status == "active")
+    )
+
+    result = await session.execute(stmt)
+    today = date.today()
+    routes: list[ActiveRoute] = []
+    for row in result.all():
+        if (
+            row.origin_lat is None
+            or row.origin_lng is None
+            or row.dest_lat is None
+            or row.dest_lng is None
+        ):
+            continue
+        transit = (row.eta - today).days if row.eta is not None else 0
+        routes.append(
+            ActiveRoute.model_validate(
+                {
+                    "id": row.shipment_id,
+                    "disruption_id": row.disruption_id,
+                    "disruption_category": row.disruption_category,
+                    "from": (float(row.origin_lat), float(row.origin_lng)),
+                    "to": (float(row.dest_lat), float(row.dest_lng)),
+                    "origin_name": row.origin_name,
+                    "destination_name": row.dest_name,
+                    "mode": _route_mode(row.mode),
+                    "status": _route_status(row.severity),
+                    "exposure": row.exposure if row.exposure is not None else Decimal("0"),
+                    "transit_days": max(0, transit),
+                    "carrier": row.carrier or "Unknown",
+                }
+            )
+        )
+    return routes
 
 
 @router.get("/{disruption_id}")

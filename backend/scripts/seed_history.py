@@ -57,6 +57,9 @@ async def seed_one_historical(s: AsyncSession, fx: HistoricalFixture, now: datet
         lat=fx.lat,
         lng=fx.lng,
         base_date=base_date,
+        destination_name=fx.destination_name,
+        destination_lat=fx.destination_lat,
+        destination_lng=fx.destination_lng,
     )
 
     disruption_id = uuid.uuid4()

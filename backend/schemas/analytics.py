@@ -23,3 +23,32 @@ class ExposureBucket(BaseModel):
     exposure: Decimal
     units: int
     pos: int
+
+
+class ExposureSummary(BaseModel):
+    """Top-of-page exposure stat used by the War Room status grid."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    active_count: int
+    total_exposure: Decimal
+
+
+class AnalyticsPoint(BaseModel):
+    """One row in an analytics breakdown (smaller shape than ExposureBucket)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    label: str
+    exposure: Decimal
+    count: int
+
+
+class AnalyticsSummary(BaseModel):
+    """Triple-grouping analytics used by the Analytics screen."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    by_customer: list[AnalyticsPoint]
+    by_sku: list[AnalyticsPoint]
+    by_quarter: list[AnalyticsPoint]

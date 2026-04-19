@@ -106,7 +106,7 @@ export const apiClient = {
   },
 
   getExposureSummary(): Promise<ExposureSummary> {
-    return request("/api/analytics/exposure", exposureSummarySchema, {
+    return request("/api/analytics/exposure/summary", exposureSummarySchema, {
       active_count: 0,
       total_exposure: "0",
     });

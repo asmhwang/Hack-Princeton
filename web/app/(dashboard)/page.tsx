@@ -157,11 +157,11 @@ function RecentDisruptions() {
 function SimulateCard() {
   const simulate = useSimulate();
   const scenarios = [
-    { id: "typhoon_kaia", label: "Typhoon Kaia", desc: "Category 4 · HCM–Shenzhen corridor", cat: "weather" },
-    { id: "suez_closure", label: "Suez closure", desc: "Red Sea re-escalation · 28-day impact", cat: "policy" },
-    { id: "port_strike_la", label: "LA port strike", desc: "ILWU action · West Coast lockout", cat: "logistics" },
-    { id: "taiwan_export_ban", label: "Taiwan export controls", desc: "Semiconductor restrictions · new SKUs", cat: "policy" },
-    { id: "euro_rail_disruption", label: "Euro rail disruption", desc: "Trans-Siberian delays cascade", cat: "logistics" },
+    { id: "typhoon_kaia", label: "Typhoon Kaia", desc: "Cat 3 · Shenzhen landfall · Yantian closure", cat: "weather" },
+    { id: "busan_strike", label: "Busan strike", desc: "KPTU 72h stoppage · Asia-Pacific corridor", cat: "logistics" },
+    { id: "cbam_tariff", label: "EU CBAM tariff", desc: "Q2 CBAM bracket shift · Class-B steel", cat: "policy" },
+    { id: "luxshare_fire", label: "Luxshare fire", desc: "Kunshan plant · 7–10d production gap", cat: "news" },
+    { id: "redsea_advisory", label: "Red Sea advisory", desc: "UKMTO Q2 extension · Cape routing", cat: "policy" },
   ];
 
   return (

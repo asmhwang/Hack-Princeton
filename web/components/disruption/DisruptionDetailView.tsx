@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+
 import { AffectedShipmentsTable } from "@/components/disruption/AffectedShipmentsTable";
 import { DisruptionHeader } from "@/components/disruption/DisruptionHeader";
 import { MitigationCardStack } from "@/components/mitigation/MitigationCardStack";
@@ -8,6 +10,56 @@ import { routesFromShipments } from "@/components/globe/routes";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { SqlPreview } from "@/components/ui/SqlPreview";
 import { useDisruption, useImpact, useMitigations } from "@/hooks/useDisruptions";
+import { useWarRoomStore } from "@/lib/store";
+
+function BackToWarRoom() {
+  const setSelectedDisruptionId = useWarRoomStore((s) => s.setSelectedDisruptionId);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSelectedDisruptionId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [setSelectedDisruptionId]);
+
+  return (
+    <button
+      type="button"
+      onClick={() => setSelectedDisruptionId(null)}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        margin: "12px 24px 0",
+        padding: "6px 10px",
+        fontSize: 12,
+        fontWeight: 500,
+        color: "var(--color-text-muted)",
+        background: "var(--color-surface)",
+        border: "1px solid var(--color-border)",
+        borderRadius: 4,
+        cursor: "pointer",
+        fontFamily: "var(--font-mono)",
+        letterSpacing: "0.04em",
+      }}
+    >
+      <span aria-hidden>←</span>
+      <span>Back to war room</span>
+      <span
+        style={{
+          marginLeft: 4,
+          padding: "0 4px",
+          fontSize: 10,
+          color: "var(--color-text-subtle)",
+          border: "1px solid var(--color-border)",
+          borderRadius: 2,
+        }}
+      >
+        Esc
+      </span>
+    </button>
+  );
+}
 
 function DisruptionDetailSkeleton() {
   return (
@@ -115,25 +167,33 @@ export function DisruptionDetailView({ disruptionId }: DisruptionDetailViewProps
   const mitigations = useMitigations(disruptionId);
 
   if (disruption.isLoading || impact.isLoading || mitigations.isLoading) {
-    return <DisruptionDetailSkeleton />;
+    return (
+      <div style={{ minHeight: "100%" }}>
+        <BackToWarRoom />
+        <DisruptionDetailSkeleton />
+      </div>
+    );
   }
 
   if (!disruption.data) {
     return (
-      <section style={{ padding: 24 }}>
-        <div
-          style={{
-            border: "1px dashed var(--color-border-strong)",
-            borderRadius: 5,
-            padding: 16,
-          }}
-        >
-          <p style={{ margin: 0, fontSize: 13, fontWeight: 500 }}>Disruption not available</p>
-          <p style={{ margin: "8px 0 0", fontSize: 13, color: "var(--color-text-muted)" }}>
-            The selected disruption could not be loaded from the API.
-          </p>
-        </div>
-      </section>
+      <div style={{ minHeight: "100%" }}>
+        <BackToWarRoom />
+        <section style={{ padding: 24 }}>
+          <div
+            style={{
+              border: "1px dashed var(--color-border-strong)",
+              borderRadius: 5,
+              padding: 16,
+            }}
+          >
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 500 }}>Disruption not available</p>
+            <p style={{ margin: "8px 0 0", fontSize: 13, color: "var(--color-text-muted)" }}>
+              The selected disruption could not be loaded from the API.
+            </p>
+          </div>
+        </section>
+      </div>
     );
   }
 
@@ -151,6 +211,7 @@ export function DisruptionDetailView({ disruptionId }: DisruptionDetailViewProps
 
   return (
     <div style={{ minHeight: "100%" }}>
+      <BackToWarRoom />
       <DisruptionHeader disruption={disruption.data} impact={impact.data ?? null} />
       <InteractiveGlobePanel
         routes={routes}

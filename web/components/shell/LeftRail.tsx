@@ -118,7 +118,9 @@ export function LeftRail() {
                   <DisruptionCard
                     disruption={d}
                     selected={selectedDisruptionId === d.id}
-                    onSelect={() => setSelectedDisruptionId(d.id)}
+                    onSelect={() =>
+                      setSelectedDisruptionId(selectedDisruptionId === d.id ? null : d.id)
+                    }
                   />
                 </motion.div>
               ))}

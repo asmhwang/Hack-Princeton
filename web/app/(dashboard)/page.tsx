@@ -17,26 +17,22 @@ function StatusGrid() {
   const active = summary?.active_count ?? disruptions.length;
   const totalExp = summary?.total_exposure ?? "0";
   const blocked = disruptions.filter((d) => d.status === "active" && d.severity >= 4).length;
-  const watching = disruptions.filter((d) => d.status === "monitoring").length;
 
-  let statusLabel = "NOMINAL";
-  let statusColor = "var(--color-ok)";
-  if (active > 2) { statusLabel = "ESCALATED"; statusColor = "var(--color-critical)"; }
-  else if (active > 0) { statusLabel = "MONITORING"; statusColor = "var(--color-warn)"; }
+  const statusLabel = active > 0 ? "ESCALATED" : "NOMINAL";
+  const statusColor = active > 0 ? "var(--color-critical)" : "var(--color-ok)";
 
   const cells = [
     { label: "Status", value: statusLabel, color: statusColor, mono: true },
     { label: "Active", value: String(active), color: active > 0 ? "var(--color-critical)" : "var(--color-ok)" },
     { label: "Exposure", value: formatCurrency(totalExp), mono: true },
     { label: "High sev", value: String(blocked), color: blocked > 0 ? "var(--color-critical)" : "var(--color-text)" },
-    { label: "Monitoring", value: String(watching), color: watching > 0 ? "var(--color-warn)" : "var(--color-text)" },
     { label: "Agents", value: "3 / 3", color: "var(--color-ok)" },
   ];
 
   return (
     <div style={{
       display: "grid",
-      gridTemplateColumns: "repeat(6, 1fr)",
+      gridTemplateColumns: "repeat(5, 1fr)",
       gap: 1,
       background: "var(--color-border)",
       border: "1px solid var(--color-border)",

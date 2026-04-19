@@ -125,6 +125,9 @@ async function request<T>(
       ...init,
       headers: {
         "Content-Type": "application/json",
+        // Bypass ngrok free-tier browser interstitial. No-op when the backend
+        // isn't behind ngrok — safe to keep on every request.
+        "ngrok-skip-browser-warning": "true",
         ...init?.headers,
       },
     });

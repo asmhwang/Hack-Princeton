@@ -64,7 +64,6 @@ export function DisruptionHeader({ disruption, impact }: DisruptionHeaderProps) 
   const shipmentCount = impact?.affected_shipments?.length ?? disruption.affected_shipments_count;
   let statusColor = "var(--color-ok)";
   if (disruption.status === "active") statusColor = "var(--color-critical)";
-  else if (disruption.status === "monitoring") statusColor = "var(--color-warn)";
 
   return (
     <section

@@ -6,36 +6,19 @@
 
 ## 0:00 – 0:25 · Problem (25s, ~80 words)
 
-> *Hero slide up: single line "suppl.ai · supply chain war room". No music.*
->
-> "Right now, as we're standing here, the Strait of Hormuz is blocked.
-> Twenty percent of the world's oil flows through that chokepoint every day — tankers are anchoring off Fujairah and refiners in Korea and India are watching their crude budgets evaporate.
->
-> This week it's the Gulf. Last spring: the Red Sea. Before that, Busan. Before that, a typhoon in Shenzhen.
->
-> When a disruption hits, a logistics manager opens six browser tabs — ERP, TMS, Slack, email, a spreadsheet, her phone — and burns five hours figuring out which containers are at risk, what it costs, and who to call.
-> Meanwhile competitors already booked the backup capacity."
+When a supply chain disruption hits, like the war on Iran blocking the Strait of Hormuz, managers face a chaotic, multi-hour scramble. They’re frantically cross-referencing breaking news, spreadsheets, and emails just to figure out what's at risk. By the time they calculate the financial hit and decide their best course of action, it’s already too late.
 
 ---
 
 ## 0:25 – 0:42 · Solution (17s, ~50 words)
 
-> *Switch to War Room screenshot, empty state. No clicks yet.*
->
-> "suppl.ai compresses those five hours into sixty seconds.
-> Three agents run continuously on three separate VMs. Scout watches the world. Analyst quantifies exposure in dollars. Strategist drafts reroutes, alternate suppliers, customer emails — ready for one-click approval.
->
-> It's not a chatbot. It's an operator cockpit."
+suppl.ai compresses those five hours into sixty seconds with an automated AI agent pipeline that streamlines the process from beginning to end. Three agents run continuously on three separate dedalus VMs. The first agent Scout watches the world for news, weather events, new policy, etc. The second agent Analyst waits for Scout to detect an anomoloy, and calculates the total exposure from the event, and what damages come out of it. Lastly, the third agent Strategist drafts reroutes, finds alternative solutions, and drafts emails to customers, shippers, and of course your boss.
 
 ---
 
 ## 0:42 – 0:55 · Tech stack (13s, ~45 words)
 
-> *Stay on War Room. Optional: briefly flash the architecture slide.*
->
-> "Three Python agents on three Dedalus Machines. Postgres `LISTEN/NOTIFY` as the nervous system — no RPC, no queue.
-> Gemini 2.x with function calling — zero text-to-SQL, zero mutation risk.
-> OpenClaw wraps every database write in the Strategist's action layer."
+For the tech stack, we used dedalus to have our 3 agents running asyncronously and concurrently, 
 
 ---
 

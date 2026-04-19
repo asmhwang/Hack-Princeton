@@ -108,9 +108,7 @@ async def simulate(
         signal_ids.append(sid)
         sig_seen = now - timedelta(hours=sfx.hours_before_disruption)
         # Unique per invocation: scenario + per-signal index + sid entropy.
-        dedupe_hash = hashlib.sha256(
-            f"simulate:{body.scenario}:{i}:{sid.hex}".encode()
-        ).hexdigest()
+        dedupe_hash = hashlib.sha256(f"simulate:{body.scenario}:{i}:{sid.hex}".encode()).hexdigest()
         await insert_signal(
             session,
             signal_id=sid,

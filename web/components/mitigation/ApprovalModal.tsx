@@ -1,8 +1,15 @@
 "use client";
 
+import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import type { MitigationOption } from "@/types/schemas";
+import type { DraftCommunication, MitigationOption } from "@/types/schemas";
 import { formatCurrency, formatPercent } from "@/lib/format";
+
+const RECIPIENT_LABEL: Record<string, string> = {
+  supplier: "Supplier",
+  customer: "Customer",
+  internal: "Internal",
+};
 
 const spring = { type: "spring" as const, stiffness: 260, damping: 26 };
 const easeOut = { duration: 0.2, ease: "easeOut" as const };
@@ -20,27 +27,74 @@ function KvCell({ label, value }: Readonly<{ label: string; value: string }>) {
   );
 }
 
-function DraftRow({ label, meta }: Readonly<{ label: string; meta: string }>) {
+function DraftRow({
+  draft, expanded, onClick,
+}: Readonly<{ draft: DraftCommunication; expanded: boolean; onClick: () => void }>) {
+  const recipientLabel = RECIPIENT_LABEL[draft.recipient_type] ?? draft.recipient_type;
   return (
     <div style={{
-      display: "flex", alignItems: "center", gap: 10,
-      padding: "8px 10px", borderRadius: 4,
       border: "1px solid var(--color-border)",
-      background: "var(--color-bg)",
+      borderRadius: 4,
+      background: expanded ? "var(--color-surface-raised)" : "var(--color-bg)",
+      overflow: "hidden",
     }}>
-      <div style={{
-        width: 22, height: 22, borderRadius: 3,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        background: "var(--color-surface-raised)",
-        fontSize: 11, color: "var(--color-text-muted)", flexShrink: 0,
-      }}>
-        ✉
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12, color: "var(--color-text)" }}>{label}</div>
-        <div style={{ fontSize: 10, color: "var(--color-text-subtle)", fontFamily: "var(--font-mono)" }}>{meta}</div>
-      </div>
-      <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>Draft</span>
+      <button
+        type="button"
+        onClick={onClick}
+        style={{
+          display: "flex", alignItems: "center", gap: 10,
+          width: "100%", padding: "8px 10px",
+          background: "transparent", border: "none", cursor: "pointer",
+          color: "inherit", textAlign: "left", font: "inherit",
+        }}
+      >
+        <div style={{
+          width: 22, height: 22, borderRadius: 3,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          background: "var(--color-surface-raised)",
+          fontSize: 11, color: "var(--color-text-muted)", flexShrink: 0,
+        }}>
+          ✉
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: 12, color: "var(--color-text)",
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            }}
+          >
+            {draft.subject}
+          </div>
+          <div style={{ fontSize: 10, color: "var(--color-text-subtle)", fontFamily: "var(--font-mono)" }}>
+            {recipientLabel} · {draft.recipient_contact}
+          </div>
+        </div>
+        <span style={{ fontSize: 10, color: "var(--color-text-subtle)" }}>
+          {expanded ? "▾" : "▸"}
+        </span>
+        <span style={{
+          fontSize: 10, color: "var(--color-text-muted)",
+          border: "1px solid var(--color-border)",
+          padding: "1px 5px", borderRadius: 2,
+          fontFamily: "var(--font-mono)", letterSpacing: "0.04em",
+        }}>
+          never sent
+        </span>
+      </button>
+      {expanded && (
+        <div
+          style={{
+            padding: "10px 14px 12px 44px",
+            borderTop: "1px dashed var(--color-border)",
+            fontSize: 12, lineHeight: "18px",
+            color: "var(--color-text-muted)",
+            whiteSpace: "pre-wrap",
+            fontFamily: "var(--font-mono)",
+          }}
+        >
+          {draft.body}
+        </div>
+      )}
     </div>
   );
 }
@@ -56,6 +110,8 @@ type ApprovalModalProps = Readonly<{
 export function ApprovalModal({ option, open, pending, onClose, onConfirm }: ApprovalModalProps) {
   const cost = option ? (option.incremental_cost ?? option.delta_cost ?? "0") : "0";
   const days = option ? (option.days_saved ?? option.delta_days ?? 0) : 0;
+  const drafts = option?.drafts ?? [];
+  const [expandedDraftId, setExpandedDraftId] = useState<string | null>(null);
 
   return (
     <AnimatePresence>
@@ -128,13 +184,30 @@ export function ApprovalModal({ option, open, pending, onClose, onConfirm }: App
               }}>
                 Prepared drafts{" "}
                 <span style={{ color: "var(--color-text-subtle)", textTransform: "none", letterSpacing: 0 }}>
-                  — never sent
+                  — {drafts.length} · never sent
                 </span>
               </h3>
               <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
-                <DraftRow label="Supplier notification" meta="Carrier ops · Draft" />
-                <DraftRow label="Customer update" meta="Affected recipients · Draft" />
-                <DraftRow label="Internal escalation" meta="#ops-critical · Draft" />
+                {drafts.length === 0 ? (
+                  <div style={{
+                    border: "1px dashed var(--color-border)",
+                    borderRadius: 4, padding: "10px 12px",
+                    fontSize: 12, color: "var(--color-text-subtle)",
+                  }}>
+                    Strategist has not prepared drafts for this option yet.
+                  </div>
+                ) : (
+                  drafts.map((d) => (
+                    <DraftRow
+                      key={d.id}
+                      draft={d}
+                      expanded={expandedDraftId === d.id}
+                      onClick={() =>
+                        setExpandedDraftId((prev) => (prev === d.id ? null : d.id))
+                      }
+                    />
+                  ))
+                )}
               </div>
             </div>
 

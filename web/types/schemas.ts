@@ -99,6 +99,19 @@ export const impactReportSchema = z
   })
   .passthrough();
 
+export const draftCommunicationSchema = z
+  .object({
+    id: z.string(),
+    mitigation_id: z.string(),
+    recipient_type: z.enum(["supplier", "customer", "internal"]),
+    recipient_contact: z.string(),
+    subject: z.string(),
+    body: z.string(),
+    created_at: z.string(),
+    sent_at: z.string().nullable(),
+  })
+  .strict();
+
 export const mitigationOptionSchema = z
   .object({
     id: z.string(),
@@ -120,23 +133,11 @@ export const mitigationOptionSchema = z
     confidence: z.number().min(0).max(1),
     rationale: z.string().optional(),
     status: z.enum(["pending", "approved", "rejected", "dismissed"]).default("pending"),
-    // Backend's MitigationWithDrafts embeds drafts — allow through without reparsing.
-    drafts: z.array(z.unknown()).optional(),
+    // Backend's MitigationWithDrafts embeds drafts — type them so the UI
+    // can render subject / body / recipient instead of treating as opaque.
+    drafts: z.array(draftCommunicationSchema).optional(),
   })
   .passthrough();
-
-export const draftCommunicationSchema = z
-  .object({
-    id: z.string(),
-    mitigation_id: z.string(),
-    recipient_type: z.enum(["supplier", "customer", "internal"]),
-    recipient_contact: z.string(),
-    subject: z.string(),
-    body: z.string(),
-    created_at: z.string(),
-    sent_at: z.string().nullable(),
-  })
-  .strict();
 
 export const activityItemSchema = z
   .object({

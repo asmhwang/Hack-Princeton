@@ -141,18 +141,25 @@ export function AffectedShipmentsTable({ shipments }: AffectedShipmentsTableProp
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
+          gap: 8,
           padding: "10px 12px",
           borderBottom: "1px solid var(--color-border)",
           background: "var(--color-surface)",
+          flexWrap: "wrap",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 12, fontWeight: 500 }}>Affected shipments</span>
-          <span className="tnum" style={{ fontSize: 11, color: "var(--color-text-subtle)", fontFamily: "var(--font-mono)" }}>
-            {sorted.length} of {shipments.length}
-          </span>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <span
+          className="tnum"
+          style={{
+            fontSize: 11,
+            color: "var(--color-text-subtle)",
+            fontFamily: "var(--font-mono)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {sorted.length} of {shipments.length}
+        </span>
+        <div style={{ display: "flex", gap: 8, flex: 1, justifyContent: "flex-end", minWidth: 0 }}>
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -165,7 +172,8 @@ export function AffectedShipmentsTable({ shipments }: AffectedShipmentsTableProp
               color: "var(--color-text)",
               fontSize: 12,
               borderRadius: 3,
-              width: 140,
+              width: 120,
+              minWidth: 0,
               outline: "none",
               fontFamily: "var(--font-mono)",
             }}
@@ -182,15 +190,16 @@ export function AffectedShipmentsTable({ shipments }: AffectedShipmentsTableProp
               color: "var(--color-text-muted)",
               fontSize: 11,
               cursor: "pointer",
+              whiteSpace: "nowrap",
             }}
           >
-            Export CSV
+            CSV
           </button>
         </div>
       </div>
 
       <div style={{ overflow: "auto", maxHeight: 360 }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, tableLayout: "fixed" }}>
           <thead>
             <tr>
               <SortHeader col="shipment_id" label="Shipment" sortBy={sortBy} dir={dir} onSort={toggleSort} />
@@ -214,14 +223,57 @@ export function AffectedShipmentsTable({ shipments }: AffectedShipmentsTableProp
                     borderBottom: idx === sorted.length - 1 ? "none" : "1px solid var(--color-border)",
                   }}
                 >
-                  <td style={{ padding: "9px 12px", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text)" }}>
+                  <td
+                    style={{
+                      padding: "9px 12px",
+                      fontFamily: "var(--font-mono)",
+                      fontSize: 11,
+                      color: "var(--color-text)",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
                     {s.shipment_id}
                   </td>
-                  <td style={{ padding: "9px 12px", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-muted)" }}>
+                  <td
+                    title={s.sku ?? undefined}
+                    style={{
+                      padding: "9px 12px",
+                      fontFamily: "var(--font-mono)",
+                      fontSize: 11,
+                      color: "var(--color-text-muted)",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      maxWidth: 120,
+                    }}
+                  >
                     {s.sku}
                   </td>
-                  <td style={{ padding: "9px 12px" }}>{s.customer_name}</td>
-                  <td style={{ padding: "9px 12px", color: "var(--color-text-muted)", fontFamily: "var(--font-mono)", fontSize: 11 }}>
+                  <td
+                    title={s.customer_name ?? undefined}
+                    style={{
+                      padding: "9px 12px",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      maxWidth: 140,
+                    }}
+                  >
+                    {s.customer_name}
+                  </td>
+                  <td
+                    title={`${s.origin} → ${s.destination}`}
+                    style={{
+                      padding: "9px 12px",
+                      color: "var(--color-text-muted)",
+                      fontFamily: "var(--font-mono)",
+                      fontSize: 11,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      maxWidth: 180,
+                    }}
+                  >
                     {s.origin} → {s.destination}
                   </td>
                   <td className="tnum" style={{ padding: "9px 12px", textAlign: "right", fontWeight: 500 }}>

@@ -26,9 +26,9 @@ function StatusGrid() {
 
   const cells = [
     { label: "Status", value: statusLabel, color: statusColor, mono: true },
-    { label: "Active disruptions", value: String(active), color: active > 0 ? "var(--color-critical)" : "var(--color-ok)" },
-    { label: "Exposure at risk", value: formatCurrency(totalExp), mono: true },
-    { label: "High severity", value: String(blocked), color: blocked > 0 ? "var(--color-critical)" : "var(--color-text)" },
+    { label: "Active", value: String(active), color: active > 0 ? "var(--color-critical)" : "var(--color-ok)" },
+    { label: "Exposure", value: formatCurrency(totalExp), mono: true },
+    { label: "High sev", value: String(blocked), color: blocked > 0 ? "var(--color-critical)" : "var(--color-text)" },
     { label: "Monitoring", value: String(watching), color: watching > 0 ? "var(--color-warn)" : "var(--color-text)" },
     { label: "Agents", value: "3 / 3", color: "var(--color-ok)" },
   ];
@@ -57,6 +57,9 @@ function StatusGrid() {
               color: color ?? "var(--color-text)",
               letterSpacing: "-0.01em",
               fontFamily: mono ? "var(--font-mono)" : undefined,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
             }}
           >
             {value}
@@ -119,8 +122,8 @@ function RecentDisruptions() {
             style={{
               width: "100%",
               display: "grid",
-              gridTemplateColumns: "120px 1fr 80px 120px 100px",
-              gap: 16,
+              gridTemplateColumns: "88px minmax(0,1fr) 96px 100px 72px",
+              gap: 12,
               padding: "11px 16px",
               alignItems: "center",
               borderTop: i === 0 ? "none" : "1px solid var(--color-border)",
@@ -207,9 +210,33 @@ function SimulateCard() {
               }}>
                 {token.label}
               </span>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text)" }}>{s.label}</div>
-                <div style={{ fontSize: 11, color: "var(--color-text-subtle)", marginTop: 1 }}>{s.desc}</div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 500,
+                    color: "var(--color-text)",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {s.label}
+                </div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: "var(--color-text-subtle)",
+                    marginTop: 1,
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                    overflow: "hidden",
+                    lineHeight: "15px",
+                  }}
+                >
+                  {s.desc}
+                </div>
               </div>
               <span style={{
                 marginLeft: "auto",

@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-SourceCategory = Literal["news", "weather", "policy", "logistics", "macro"]
+SourceCategory = Literal["news", "weather", "policy", "logistics", "macro", "industrial"]
 
 
 class SignalClassification(BaseModel):

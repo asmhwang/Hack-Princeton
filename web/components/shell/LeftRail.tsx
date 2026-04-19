@@ -49,7 +49,11 @@ export function LeftRail() {
   const setSelectedDisruptionId = useWarRoomStore((s) => s.setSelectedDisruptionId);
   const deleteDisruption = useDeleteDisruption();
 
-  const sorted = [...data].sort((a, b) => Number(b.total_exposure) - Number(a.total_exposure));
+  const sorted = [...data].sort((a, b) => {
+    const ta = Date.parse(a.detected_at ?? a.first_seen_at ?? "") || 0;
+    const tb = Date.parse(b.detected_at ?? b.first_seen_at ?? "") || 0;
+    return tb - ta;
+  });
 
   return (
     <aside
